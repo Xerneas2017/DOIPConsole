@@ -1,0 +1,333 @@
+sequenceDiagram
+    autonumber
+    participant UI as 前端 UI (A区)
+    participant WS as WsServer / RequestRouter
+    participant UDP as DoipUdpDiscovery
+    participant GW as DoIP 实体/网关
+    participant ST as TraceStore
+
+    UI->>WS: scan.request {targetIp?=null, timeoutMs=5000, passive=true}
+    WS->>UDP: broadcast + startPassiveListen()
+    activate UDP
+    UDP->>UDP: 绑定动态源端口, 开 SO_BROADCAST/REUSEADDR
+    UDP->>GW: 0x0001 VehicleIdentificationRequest (UDP 13400 广播)
+    UDP->>GW: 同时开始被动监听 0x0004 公告
+
+    par 单播/广播响应
+        GW-->>UDP: 0x0004 VehicleAnnouncement (VIN/EID/GID/LA)
+    and 被动公告
+        GW-->>UDP: 0x0004 VehicleAnnouncement (周期 500ms ×3)
+    end
+
+    loop 每条 0x0004
+        UDP->>ST: append(TraceEntry{TX/RX, transport=UDP})
+        ST-->>WS: EventBus.emit() → seq
+        UDP->>UDP: 去重(VIN+LA+IP) 加入 entities
+    end
+
+    UDP-->>WS: entities[] (5s 窗口结束或 timeoutMs 到)
+    deactivate UDP
+    WS-->>UI: scan.result {entities, partial=false}
+    Note over UI: 列表展示 VIN/EID/GID/LA/NodeType/IP<br/>点击「连」带入 IP 与 TA
+    WS-->>UI: trace.batch (发现期间的报文，带 seq)
+
+---
+
+sequenceDiagram
+    autonumber
+    participant UI as 前端 UI
+    participant RR as RequestRouter
+    participant CM as ConnectionManager
+    participant CLI as DoipClient
+    participant RD as DoipFrameReader
+    participant GW as 网关/ECU
+    participant TX as TraceStore
+
+    UI->>RR: connect.request {mode, ip, port, sa, ta, activationType, protocolVersion}
+    RR->>CM: connect(cfg)
+    CM->>CM: new DoipSession('default')
+    CM->>CLI: connect()  [SocketFactory: PlainTcp]
+    CM-->>UI: status {state: TCP_CONNECTING}
+
+    alt TCP 建链成功
+        GW-->>CLI: SYN-ACK
+        CLI-->>CM: 'connect'
+        CM-->>UI: status {state: TCP_CONNECTED}
+        CM->>CLI: sendRoutingActivation(sa, activationType, pv)
+        CLI->>GW: 0x0005 RoutingActivationRequest
+        CM->>CM: 启动 ROUTING_ACTIVATION_TIMEOUT(500ms)
+        CM-->>UI: status {state: ROUTING_ACTIVATING}
+
+        alt 收到 0x0006 code=0x10
+            GW-->>CLI: 0x0006 RoutingActivationResponse(0x10)
+            CLI->>RD: push(chunk)
+            RD-->>CLI: frame(0x0006)
+            CLI-->>CM: routingCode=0x10
+            CM->>CM: fsm → ROUTING_ACTIVE（清 timer）
+            CM-->>UI: status {state: ROUTING_ACTIVE, lastRoutingCodeZh:'路由激活成功'}
+            CM-->>UI: cmd.ack {ok:true}
+        else 收到 0x0006 code=0x11 (需确认)
+            GW-->>CLI: 0x0006 code=0x11
+            CM->>CM: 保持 ROUTING_ACTIVATING，延长等待
+            CM-->>UI: error {code:E_ROUTING_CONFIRM_REQUIRED, hint:'等待网关确认'}
+        else 收到 0x0006 code ∈ 0x00..0x07
+            GW-->>CLI: 0x0006 code=0x01
+            CM-->>UI: error {code:E_ROUTING_DENIED, messageZh:'并发 socket 已达上限', hint:...}
+            CM->>CM: fsm → ERROR，★Q1 不自动重试，保持 socket 供手动重激活
+            CM-->>UI: cmd.ack {ok:false}
+        else 500ms 超时
+            CM->>CM: fsm → ERROR
+            CM-->>UI: error {code:E_ROUTING_TIMEOUT}
+            CM->>CLI: close()  [避免半开连接泄漏]
+        end
+
+    else TCP 建链失败
+        GW--xCLI: ECONNREFUSED / ETIMEDOUT / EHOSTUNREACH
+        CLI-->>CM: 'error'
+        CM-->>UI: error {code: E_CONN_REFUSED / E_CONN_TIMEOUT, hint:'检查 IP/端口/网线/VLAN'}
+        CM-->>UI: cmd.ack {ok:false}
+    end
+
+    Note over UI,RD: 全过程每帧经 DoipFrameReader 分帧后入 TraceStore，<br/>统一由 EventBus 分配 seq 推给前端
+
+    opt 手动重激活（★Q1 唯一允许的"重试"）
+        UI->>RR: routing.reactivate
+        RR->>CM: reactivate()  → 同一 socket 重发 0x0005
+    end
+
+---
+
+sequenceDiagram
+    autonumber
+    participant UI as 前端请求区
+    participant RR as RequestRouter
+    participant TM as TransactionManager
+    participant CLI as DoipClient
+    participant GW as 网关
+    participant ECU as 目标 ECU
+    participant ST as TraceStore
+
+    UI->>RR: uds.send {addressing:'physical', sid:'0x10', subFunction:'0x03'}
+    RR->>TM: send(req)
+    TM->>TM: txn = new Transaction('tx-0007'); state=CREATED
+    TM->>CLI: sendDiagnosticMessage(sa, ta, [0x10,0x03])
+    CLI->>GW: 0x8001 (SA=0x0E00, TA=0x1000, userData=10 03)
+    TM->>ST: append(请求 TraceEntry{txnRole:'request', txnId})
+    TM->>TM: state=WAITING_ACK; 启动 ACK_WAIT_TIMEOUT(2000ms)
+
+    alt 分支 A：正常三方完成
+        GW-->>CLI: 0x8002 ACK (ackCode=0, previousMessage=10 03)
+        TM->>ST: append(ACK TraceEntry{txnRole:'ack', linkedSeq=请求seq})
+        TM->>TM: 记 gatewayForwardLatencyMs; 清 ack timer
+        TM->>TM: state=WAITING_UDS_RESPONSE; 启动 P2(200ms)
+        GW->>ECU: 转发 10 03
+        ECU-->>GW: 50 03
+        GW-->>CLI: 0x8001 (SA=0x1000, TA=0x0E00, userData=50 03)
+        TM->>TM: matchForResponse(0x1000,0x0E00,50 03) → txn-0007 ✓
+        TM->>ST: append(响应 TraceEntry{txnRole:'response', linkedSeq=ACK seq, latencyMs})
+        TM->>TM: state=COMPLETED; 清 P2 timer
+        TM-->>RR: SendUdsResult{ok:true, responseHex:'50 03', latencyMs}
+        RR-->>UI: cmd.ack {ok:true} + trace.batch
+        Note over UI: 会话状态由 UdsSessionTracker 依据响应事实切到 EXTENDED<br/>若已开启自动保持，则启动 3E 周期任务
+
+    else 分支 B：网关拒绝转发（0x8003 NACK）
+        GW-->>CLI: 0x8003 NACK (nackCode=0x03 unknown target address)
+        TM->>ST: append(NACK TraceEntry{txnRole:'nack'})
+        TM->>TM: state=FAILED_NACK; nackNameZh='目标地址未知'
+        TM-->>RR: {ok:false, errorCode:'E_TXN_NACK', note:'网关未转发（非 UDS 层错误）'}
+        RR-->>UI: error {code:E_TXN_NACK, linkedSeq:请求seq}
+        Note over UI: ★Trace 行标红并注明"网关未转发（非 UDS 层错误）"<br/>详情面板给出三层归因，不与 NRC 混淆
+
+    else 分支 C：ACK 超时（网关没收下）
+        TM->>TM: ACK_WAIT_TIMEOUT(2000ms) 触发
+        TM->>ST: append(超时 TraceEntry{timeout:true})
+        TM->>TM: state=FAILED_ACK_TIMEOUT
+        TM-->>UI: error {code:E_TXN_ACK_TIMEOUT,<br/>messageZh:'网关未在 2000ms 内返回 ACK/NACK，请求可能未进入网关'}
+        Note over TM: ★与分支 D 严格区分：这是"网关没收下"
+
+    else 分支 D：已 ACK 但 UDS 响应超时
+        GW-->>CLI: 0x8002 ACK
+        TM->>TM: state=WAITING_UDS_RESPONSE; 启动 P2(200ms)
+        TM->>TM: P2 超时触发
+        TM->>ST: append(超时 TraceEntry{timeout:true})
+        TM->>TM: state=FAILED_UDS_TIMEOUT
+        TM-->>UI: error {code:E_TXN_UDS_TIMEOUT,<br/>messageZh:'网关已收下并转发（收到 0x8002 ACK），但 ECU 在 200ms 内未响应'}
+        Note over UI: ★与分支 C 严格区分：这是"网关已转发但 ECU 未回"
+
+    else 分支 E：NRC 0x78 pending → P2* 续等
+        GW-->>CLI: 0x8001 (7F 10 78)
+        TM->>TM: state=WAITING_PENDING; 清 P2，启动 P2*(5000ms)
+        alt P2* 内收到最终响应
+            GW-->>CLI: 0x8001 (50 03)
+            TM->>TM: state=COMPLETED
+        else P2* 超时
+            TM->>TM: state=FAILED_UDS_TIMEOUT
+            TM-->>UI: error {code:E_TXN_UDS_TIMEOUT, hint:'ECU 持续 pending，考虑延长 P2*'}
+        end
+
+    else 分支 F：抑制正响应（10 83）
+        TM->>TM: suppressPositiveResponse=true
+        GW-->>CLI: 0x8002 ACK
+        TM->>TM: state=SUPPRESSED; 开 200ms NRC 观察窗
+        Note over TM: 窗口内若来 7F 10 xx 则记 NRC；否则静默完成，不报超时
+    end
+
+    opt 连接中途断开
+        CLI-->>TM: onSessionClosed
+        TM->>TM: 所有非终态事务 → CANCELLED，清全部 timer
+    end
+
+---
+
+sequenceDiagram
+    autonumber
+    participant UI as SecurityAccessPanel
+    participant RR as RequestRouter
+    participant SA as SecurityAccessFlow
+    participant KE as KeyAlgorithmEngine
+    participant TM as TransactionManager
+    participant GW as 网关/ECU
+    participant TR as UdsSessionTracker
+
+    UI->>RR: security.unlock {level:1, keyAlgorithmId:'builtin.xorShift'}
+    RR->>SA: unlock(1, algoId)
+    SA->>TM: send({sid:'0x27', subFunction:'0x01'})   %% 奇数 = requestSeed
+    TM->>GW: 0x8001 (27 01)
+    GW-->>TM: 0x8002 ACK → 0x8001 (67 01 <seed 4B>)
+    TM-->>SA: seed Buffer
+
+    alt ECU 拒绝取种子
+        TM-->>SA: NRC 0x37 requiredTimeDelayNotExpired
+        SA-->>UI: error {code:E_SEC_DELAY_NOT_EXPIRED, hint:'等待延时计时器到期后重试'}
+    else 取种子成功
+        SA->>KE: compute(spec, {level:1, seed})
+        alt type=constant / xor / reverseBytes / compose
+            KE->>KE: 按 wordWidth/endian 逐字位运算
+        else type=javascript
+            KE->>KE: vm.runInNewContext(source, sandbox, {timeout:100ms})
+            Note over KE: 沙箱无 require/process/fs/net<br/>异常或超时 → E_LIB_KEY_ALGO_FAILED（带行号）
+        end
+        KE-->>SA: key Buffer
+        SA-->>UI: security.seedKeyPreview {seedHex, keyHex}   %% Trace 明文展示
+        SA->>TM: send({sid:'0x27', subFunction:'0x02', dataHex:key})  %% 偶数 = sendKey
+        TM->>GW: 0x8001 (27 02 <key>)
+        GW-->>TM: 0x8002 ACK → 0x8001 (67 02)
+        TM-->>SA: ok
+        SA->>TR: observe(正响应) → securityLevels += 1
+        TR-->>UI: status {securityLevels:[1]}
+    else 密钥错误
+        GW-->>TM: 0x8001 (7F 27 35 invalidKey)
+        TM-->>SA: NRC 0x35
+        SA-->>UI: error {code:E_SEC_INVALID_KEY,<br/>hint:'检查 Seed/Key 算法：当前 seed=… key=…，可换算法或改用自定义 JS'}
+    else 次数超限
+        GW-->>TM: 0x8001 (7F 27 36)
+        SA-->>UI: error {code:E_SEC_ATTEMPTS_EXCEEDED, hint:'等待延时后重试'}
+    end
+
+---
+
+sequenceDiagram
+    autonumber
+    participant UI as 请求区(寻址=功能)
+    participant TM as TransactionManager
+    participant GW as 网关
+    participant E1 as ECU 0x1000
+    participant E2 as ECU 0x1010
+    participant E3 as ECU 0x1020
+    participant ST as TraceStore
+
+    UI->>TM: send({addressing:'functional', ta:0x1FFF, sid:'0x22', dids:['0xF190']})
+    TM->>TM: txn.functional=true; state=WAITING_ACK
+    TM->>GW: 0x8001 (SA=0x0E00, TA=0x1FFF, 22 F1 90)
+    GW-->>TM: 0x8002 ACK (功能寻址通常只回一条)
+    TM->>TM: state=WAITING_UDS_RESPONSE<br/>启动 FUNCTIONAL_AGGREGATION_WINDOW(2000ms)
+
+    par 各 ECU 陆续响应
+        E1-->>GW: 62 F1 90 <VIN1>
+        GW-->>TM: 0x8001 (SA=0x1000, TA=0x0E00, 62 F1 90 ...)
+        TM->>ST: append(txnId, sa=0x1000)
+    and
+        E2-->>GW: 62 F1 90 <VIN2>
+        GW-->>TM: 0x8001 (SA=0x1010 ...)
+        TM->>ST: append(txnId, sa=0x1010)
+    and
+        E3-->>GW: 7F 22 31
+        GW-->>TM: 0x8001 (SA=0x1020, 7F 22 31)
+        TM->>ST: append(txnId, sa=0x1020, nrc=0x31)
+    end
+
+    Note over TM: 窗口内每来一条都刷新"最后一条到达时间"，<br/>但窗口总长固定 2000ms（不无限延长，避免挂住）
+    TM->>TM: 窗口到点 → 汇总 functionalResponses
+    alt 收到 ≥2 条
+        TM-->>UI: {ok:true, kind:'multi', count:3, responses:[按 SA 分组]}
+    else 仅 1 条
+        TM-->>UI: {ok:true, kind:'single'}
+    else 0 条
+        TM-->>UI: {ok:false, kind:'none', errorCode:'E_TXN_UDS_TIMEOUT'}
+    end
+    Note over UI: Trace 中同一 txnId 的响应按 SA 分组缩进展示，<br/>行首标注来源 SA 与别名
+
+---
+
+sequenceDiagram
+    autonumber
+    participant UI as 仿真控制卡片
+    participant RR as RequestRouter
+    participant SIM as SimEcuRuntime
+    participant SRV as DoipEntityServer (真 socket)
+    participant UDP as DoipEntityUdp
+    participant FI as FaultInjector
+    participant VE as VirtualEcu ×N
+    participant CLI as DoipClient (客户端侧)
+
+    UI->>RR: sim.start {port:13401, entities:[3×配置]}
+    RR->>SIM: start(cfg)
+    SIM->>SRV: net.createServer().listen(127.0.0.1, 13401)
+    SIM->>UDP: dgram.bind(127.0.0.1, 13401)
+    alt 端口被占用
+        SRV-->>SIM: EADDRINUSE
+        SIM->>SRV: 顺延 13402..13410 重试
+        SIM-->>UI: sim.status {port:13402}   %% UI 显示实际端口
+    end
+    SIM->>UDP: announce() ×3 (间隔 500ms, 0x0004)
+    SIM-->>UI: sim.status {running:true, port, entities, uptimeMs}
+    Note over UI: 切"仿真模式"自动把目标填为 127.0.0.1:实际端口<br/>★客户端连仿真与连真实走完全相同的 DoipClient 路径
+
+    UI->>RR: connect.request {ip:'127.0.0.1', port:13402, sa:'0x0E00', ta:'0x1000'}
+    RR->>CLI: connect() → 0x0005 → 0x0006(0x10)
+    CLI->>SRV: 0x0005 RoutingActivationRequest
+    SRV->>SRV: 查 routingActivation 配置 / 问 FI.match(routingCode)
+    SRV-->>CLI: 0x0006 code=0x10
+
+    CLI->>SRV: 0x8001 (22 F1 90)
+    SRV->>FI: match({la:'0x1000', sid:'0x22', did:'0xF190'})
+    alt 命中故障规则
+        FI-->>SRV: rule
+        alt action=nrc 0x31
+            SRV-->>CLI: 0x8002 ACK → 0x8001 (7F 22 31)
+        else action=nack 0x03
+            SRV-->>CLI: 0x8003 NACK (0x03)   %% 不进 UDS 层
+        else action=noResponse
+            SRV--xCLI: 不发任何字节 → 客户端 P2 超时 ★真实超时
+        else action=delayMs 3000
+            SRV->>SRV: setTimeout(3000)
+            SRV-->>CLI: 0x8001 (7F 22 78) 先行 → 3s 后 (62 F1 90 ...)  %% 验证 P2*/pending
+        else action=dropConnection
+            SRV-->>CLI: socket.destroy() → 客户端 ECONNRESET
+        end
+        FI->>FI: remaining-- ; 归零则禁用规则
+    else 未命中
+        SRV->>VE: handleUds([22 F1 90])
+        VE->>VE: 查 dids['0xF190'] → ascii VIN
+        VE-->>SRV: 62 F1 90 <17B VIN>
+        SRV-->>CLI: 0x8002 ACK → 0x8001 (62 F1 90 ...)
+    end
+
+    opt 热改数据集
+        UI->>RR: sim.patchEntity {la:'0x1000', dids:{'0xF190':'...'}}
+        RR->>SIM: patchEntity() → 立即生效，无需重启
+    end
+
+    UI->>RR: sim.stop
+    RR->>SIM: stop() → 关 TCP/UDP，等待连接排空(≤1s)
+    SIM-->>UI: sim.status {running:false}

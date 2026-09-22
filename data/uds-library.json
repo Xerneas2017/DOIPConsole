@@ -1,0 +1,528 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "name": "DoIP 诊断控制台 — 内置 UDS 服务库",
+    "description": "常用 UDS 服务 / NRC / DID / 地址别名 / DoIP 码表。★本文件为内置基线（builtin:true），用户自定义项存于 data/uds-library.user.json，升级只合并新增内置项，绝不覆盖自定义项。",
+    "updatedAt": "2026-09-22"
+  },
+  "doipTables": {
+    "routingActivationCodes": [
+      { "code": "0x00", "name": "DeniedUnknownSourceAddress", "nameZh": "拒绝：源地址未注册", "hint": "检查 SA 是否在网关白名单内", "builtin": true },
+      { "code": "0x01", "name": "DeniedAllSocketsInUse", "nameZh": "拒绝：并发 socket 已达上限", "hint": "断开其它 tester 连接后重激活", "builtin": true },
+      { "code": "0x02", "name": "DeniedDifferentSourceAddress", "nameZh": "拒绝：同一 socket 出现不同 SA", "hint": "该 socket 已用其它 SA 激活", "builtin": true },
+      { "code": "0x03", "name": "DeniedSourceAddressAlreadyActive", "nameZh": "拒绝：SA 已在其它 socket 激活", "hint": "先用原 socket 断开，或换一个 SA", "builtin": true },
+      { "code": "0x04", "name": "DeniedVehicleManufacturerSpecific", "nameZh": "拒绝：整车厂自定义原因", "hint": "查阅整车厂文档", "builtin": true },
+      { "code": "0x10", "name": "RoutingSuccessfullyActivated", "nameZh": "路由激活成功", "builtin": true, "severity": "info" },
+      { "code": "0x11", "name": "RoutingActivationPendingConfirmation", "nameZh": "路由激活待确认", "hint": "等待网关/用户确认后自动激活，可稍后查询状态", "builtin": true, "severity": "info" }
+    ],
+    "genericHeaderNackCodes": [
+      { "code": "0x00", "name": "IncorrectPatternFormat", "nameZh": "通用头格式错误", "hint": "协议版本/inverse 字节不正确，检查对端实现", "builtin": true },
+      { "code": "0x01", "name": "UnknownPayloadType", "nameZh": "未知 payload type", "hint": "对端不认识我们发的 payload type", "builtin": true },
+      { "code": "0x02", "name": "MessageTooLarge", "nameZh": "报文过大", "hint": "超出对端单帧上限，拆小后重试", "builtin": true },
+      { "code": "0x03", "name": "OutOfMemory", "nameZh": "内存不足", "hint": "对端资源不足，稍后重试", "builtin": true },
+      { "code": "0x04", "name": "InvalidPayloadLength", "nameZh": "payload 长度非法", "hint": "payloadLength 与实际字节数不符", "builtin": true }
+    ],
+    "diagnosticMessageNackCodes": [
+      { "code": "0x02", "name": "InvalidSourceAddress", "nameZh": "源地址无效", "hint": "★网关未转发（非 UDS 层错误）：检查路由是否已激活、SA 是否被接受", "builtin": true },
+      { "code": "0x03", "name": "UnknownTargetAddress", "nameZh": "目标地址未知", "hint": "★网关未转发（非 UDS 层错误）：TA 不在网关路由表内", "builtin": true },
+      { "code": "0x04", "name": "DiagnosticMessageTooLarge", "nameZh": "诊断报文过大", "hint": "★网关未转发（非 UDS 层错误）：超出网关单帧上限", "builtin": true },
+      { "code": "0x05", "name": "OutOfMemory", "nameZh": "内存不足", "hint": "★网关未转发（非 UDS 层错误）：网关资源不足，稍后重试", "builtin": true },
+      { "code": "0x06", "name": "TargetUnreachable", "nameZh": "目标不可达", "hint": "★网关未转发（非 UDS 层错误）：目标 ECU 离线或子网不可达", "builtin": true },
+      { "code": "0x07", "name": "UnknownNetwork", "nameZh": "未知网络", "hint": "★网关未转发（非 UDS 层错误）：检查网关网络配置", "builtin": true },
+      { "code": "0x08", "name": "TransportProtocolError", "nameZh": "传输协议错误", "hint": "★网关未转发（非 UDS 层错误）：子网传输层（如 ISO-TP）出错", "builtin": true }
+    ],
+    "ackCodes": [
+      { "code": "0x00", "name": "PositiveAcknowledge", "nameZh": "网关已收下并转发", "builtin": true, "severity": "info" }
+    ]
+  },
+  "nrcTable": [
+    { "code": "0x10", "name": "GeneralReject", "nameZh": "通用拒绝", "severity": "error", "builtin": true },
+    { "code": "0x11", "name": "ServiceNotSupported", "nameZh": "服务不支持", "severity": "error", "hint": "该 ECU 未实现此服务", "builtin": true },
+    { "code": "0x12", "name": "SubFunctionNotSupported", "nameZh": "子功能不支持", "severity": "error", "builtin": true },
+    { "code": "0x13", "name": "IncorrectMessageLengthOrInvalidFormat", "nameZh": "报文长度或格式错误", "severity": "error", "builtin": true },
+    { "code": "0x14", "name": "ResponseTooLong", "nameZh": "响应过长", "severity": "error", "builtin": true },
+    { "code": "0x21", "name": "BusyRepeatRequest", "nameZh": "忙，请重发", "severity": "warn", "builtin": true },
+    { "code": "0x22", "name": "ConditionsNotCorrect", "nameZh": "前置条件不满足", "severity": "warn", "hint": "检查车速/电源模式/会话等前置条件", "builtin": true },
+    { "code": "0x24", "name": "RequestSequenceError", "nameZh": "请求顺序错误", "severity": "warn", "builtin": true },
+    { "code": "0x25", "name": "NoResponseFromSubnetComponent", "nameZh": "子网组件无响应", "severity": "error", "builtin": true },
+    { "code": "0x26", "name": "FailurePreventsExecutionOfRequestedAction", "nameZh": "内部故障导致无法执行", "severity": "error", "builtin": true },
+    { "code": "0x31", "name": "RequestOutOfRange", "nameZh": "请求越界", "severity": "error", "hint": "DID/参数在该 ECU 上不存在", "builtin": true },
+    { "code": "0x33", "name": "SecurityAccessDenied", "nameZh": "安全访问被拒绝", "severity": "error", "hint": "先执行 0x27 解锁再访问", "builtin": true },
+    { "code": "0x35", "name": "InvalidKey", "nameZh": "密钥错误", "severity": "error", "hint": "检查 Seed/Key 算法：可换算法或改用自定义 JS", "builtin": true },
+    { "code": "0x36", "name": "ExceedNumberOfAttempts", "nameZh": "尝试次数超限", "severity": "error", "hint": "等待延时计时器到期后重试", "builtin": true },
+    { "code": "0x37", "name": "RequiredTimeDelayNotExpired", "nameZh": "延时未到", "severity": "warn", "hint": "等待延时计时器到期后重试", "builtin": true },
+    { "code": "0x70", "name": "UploadDownloadNotAccepted", "nameZh": "上传/下载不被接受", "severity": "error", "builtin": true },
+    { "code": "0x71", "name": "TransferDataSuspended", "nameZh": "数据传输暂停", "severity": "warn", "builtin": true },
+    { "code": "0x72", "name": "GeneralProgrammingFailure", "nameZh": "通用编程失败", "severity": "error", "builtin": true },
+    { "code": "0x73", "name": "WrongBlockSequenceCounter", "nameZh": "块序号错误", "severity": "error", "builtin": true },
+    { "code": "0x78", "name": "RequestCorrectlyReceivedResponsePending", "nameZh": "已收到请求，响应待续", "severity": "info", "hint": "★非错误：ECU 处理中，事务转入 P2* 续等", "builtin": true },
+    { "code": "0x7E", "name": "SubFunctionNotSupportedInActiveSession", "nameZh": "当前会话不支持该子功能", "severity": "warn", "hint": "先切到扩展会话（10 03）", "builtin": true },
+    { "code": "0x7F", "name": "ServiceNotSupportedInActiveSession", "nameZh": "当前会话不支持该服务", "severity": "warn", "hint": "先切到扩展/编程会话", "builtin": true },
+    { "code": "0x81", "name": "RpmTooHigh", "nameZh": "转速过高", "severity": "warn", "builtin": true },
+    { "code": "0x82", "name": "RpmTooLow", "nameZh": "转速过低", "severity": "warn", "builtin": true },
+    { "code": "0x83", "name": "EngineIsRunning", "nameZh": "发动机正在运转", "severity": "warn", "builtin": true },
+    { "code": "0x84", "name": "EngineIsNotRunning", "nameZh": "发动机未运转", "severity": "warn", "builtin": true },
+    { "code": "0x85", "name": "EngineRunTimeTooLow", "nameZh": "发动机运行时间过短", "severity": "warn", "builtin": true },
+    { "code": "0x86", "name": "TemperatureTooHigh", "nameZh": "温度过高", "severity": "warn", "builtin": true },
+    { "code": "0x87", "name": "TemperatureTooLow", "nameZh": "温度过低", "severity": "warn", "builtin": true },
+    { "code": "0x88", "name": "VehicleSpeedTooHigh", "nameZh": "车速过高", "severity": "warn", "builtin": true },
+    { "code": "0x89", "name": "VehicleSpeedTooLow", "nameZh": "车速过低", "severity": "warn", "builtin": true },
+    { "code": "0x8A", "name": "ThrottlePedalTooHigh", "nameZh": "油门踏板过高", "severity": "warn", "builtin": true },
+    { "code": "0x8B", "name": "ThrottlePedalTooLow", "nameZh": "油门踏板过低", "severity": "warn", "builtin": true },
+    { "code": "0x8C", "name": "TransmissionRangeNotInNeutral", "nameZh": "变速箱不在空挡", "severity": "warn", "builtin": true },
+    { "code": "0x8D", "name": "TransmissionRangeNotInGear", "nameZh": "变速箱不在挡位", "severity": "warn", "builtin": true },
+    { "code": "0x8F", "name": "BrakeSwitchNotClosed", "nameZh": "制动开关未闭合", "severity": "warn", "builtin": true },
+    { "code": "0x90", "name": "ShifterLeverNotInPark", "nameZh": "换挡杆不在 P 挡", "severity": "warn", "builtin": true },
+    { "code": "0x91", "name": "TorqueConverterClutchLocked", "nameZh": "液力变矩器离合器锁止", "severity": "warn", "builtin": true },
+    { "code": "0x92", "name": "VoltageTooHigh", "nameZh": "电压过高", "severity": "warn", "builtin": true },
+    { "code": "0x93", "name": "VoltageTooLow", "nameZh": "电压过低", "severity": "warn", "builtin": true },
+    { "code": "0x94", "name": "ResourceTemporarilyNotAvailable", "nameZh": "资源暂时不可用", "severity": "warn", "builtin": true }
+  ],
+  "services": [
+    {
+      "id": "0x10",
+      "name": "DiagnosticSessionControl",
+      "nameZh": "诊断会话控制",
+      "shortEn": "DSC",
+      "shortZh": "会话控制",
+      "positiveResponseId": "0x50",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        {
+          "name": "diagnosticSessionType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "DefaultSession", "nameZh": "默认会话" },
+            { "value": "0x02", "name": "ProgrammingSession", "nameZh": "编程会话" },
+            { "value": "0x03", "name": "ExtendedDiagnosticSession", "nameZh": "扩展会话" },
+            { "value": "0x04", "name": "SafetySystemDiagnosticSession", "nameZh": "安全系统会话" }
+          ]
+        }
+      ],
+      "positiveResponseForm": [
+        { "name": "diagnosticSessionType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "sessionParameterRecord", "role": "data", "offset": 2, "length": 4, "widget": "hex", "optional": true }
+      ]
+    },
+    {
+      "id": "0x11",
+      "name": "ECUReset",
+      "nameZh": "ECU 复位",
+      "shortEn": "ER",
+      "shortZh": "ECU复位",
+      "positiveResponseId": "0x51",
+      "supportsFunctional": true,
+      "builtin": true,
+      "destructive": true,
+      "form": [
+        {
+          "name": "resetType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "HardReset", "nameZh": "硬复位" },
+            { "value": "0x02", "name": "KeyOffOnReset", "nameZh": "钥匙开关复位" },
+            { "value": "0x03", "name": "SoftReset", "nameZh": "软复位" },
+            { "value": "0x04", "name": "EnableRapidPowerShutDown", "nameZh": "启用快速断电" },
+            { "value": "0x05", "name": "DisableRapidPowerShutDown", "nameZh": "禁用快速断电" }
+          ]
+        }
+      ],
+      "positiveResponseForm": [
+        { "name": "resetType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "powerDownTime", "role": "data", "offset": 2, "length": 1, "widget": "number", "optional": true }
+      ]
+    },
+    {
+      "id": "0x14",
+      "name": "ClearDiagnosticInformation",
+      "nameZh": "清除诊断信息（DTC）",
+      "shortEn": "CDTCI",
+      "shortZh": "清除DTC",
+      "positiveResponseId": "0x54",
+      "supportsFunctional": true,
+      "builtin": true,
+      "destructive": true,
+      "form": [
+        { "name": "groupOfDTC", "role": "data", "offset": 1, "length": 3, "widget": "hex" }
+      ],
+      "positiveResponseForm": []
+    },
+    {
+      "id": "0x19",
+      "name": "ReadDTCInformation",
+      "nameZh": "读取 DTC 信息",
+      "shortEn": "RDTCI",
+      "shortZh": "读取DTC",
+      "positiveResponseId": "0x59",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        {
+          "name": "reportType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "ReportNumberOfDTCByStatusMask", "nameZh": "按状态掩码报 DTC 数量" },
+            { "value": "0x02", "name": "ReportDTCByStatusMask", "nameZh": "按状态掩码报 DTC 列表" },
+            { "value": "0x04", "name": "ReportDTCSnapshotRecordByDTCNumber", "nameZh": "按 DTC 号报快照" },
+            { "value": "0x06", "name": "ReportDTCExtendedDataRecordByDTCNumber", "nameZh": "按 DTC 号报扩展数据" },
+            { "value": "0x0A", "name": "ReportSupportedDTC", "nameZh": "报全部支持的 DTC" }
+          ]
+        },
+        { "name": "dtcStatusMask", "role": "data", "offset": 2, "length": 1, "widget": "hex" }
+      ],
+      "positiveResponseForm": [
+        { "name": "reportType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "dtcAndStatusRecord", "role": "data", "offset": 2, "length": -1, "widget": "hex" }
+      ]
+    },
+    {
+      "id": "0x22",
+      "name": "ReadDataByIdentifier",
+      "nameZh": "按标识符读数据",
+      "shortEn": "RDBI",
+      "shortZh": "读DID",
+      "positiveResponseId": "0x62",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        { "name": "dataIdentifier", "role": "did", "offset": 1, "length": 2, "widget": "didSelect" }
+      ],
+      "positiveResponseForm": [
+        { "name": "dataIdentifier", "role": "did", "offset": 1, "length": 2, "widget": "didSelect" },
+        { "name": "dataRecord", "role": "data", "offset": 3, "length": -1, "widget": "hex" }
+      ]
+    },
+    {
+      "id": "0x27",
+      "name": "SecurityAccess",
+      "nameZh": "安全访问（Seed/Key）",
+      "shortEn": "SA",
+      "shortZh": "安全访问",
+      "positiveResponseId": "0x67",
+      "supportsFunctional": false,
+      "builtin": true,
+      "flow": "seedKey",
+      "form": [
+        {
+          "name": "securityAccessType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "RequestSeedLevel1", "nameZh": "请求种子（等级 1）" },
+            { "value": "0x02", "name": "SendKeyLevel1", "nameZh": "发送密钥（等级 1）" },
+            { "value": "0x03", "name": "RequestSeedLevel2", "nameZh": "请求种子（等级 2）" },
+            { "value": "0x04", "name": "SendKeyLevel2", "nameZh": "发送密钥（等级 2）" },
+            { "value": "0x05", "name": "RequestSeedLevel3", "nameZh": "请求种子（等级 3）" },
+            { "value": "0x06", "name": "SendKeyLevel3", "nameZh": "发送密钥（等级 3）" }
+          ]
+        },
+        { "name": "securityKey", "role": "data", "offset": 2, "length": -1, "widget": "hex", "optional": true }
+      ],
+      "positiveResponseForm": [
+        { "name": "securityAccessType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "securitySeed", "role": "data", "offset": 2, "length": -1, "widget": "hex", "optional": true }
+      ]
+    },
+    {
+      "id": "0x28",
+      "name": "CommunicationControl",
+      "nameZh": "通信控制",
+      "shortEn": "CC",
+      "shortZh": "通信控制",
+      "positiveResponseId": "0x68",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        {
+          "name": "controlType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x00", "name": "EnableRxAndTx", "nameZh": "启用收发" },
+            { "value": "0x01", "name": "EnableRxAndDisableTx", "nameZh": "启用收、禁用发" },
+            { "value": "0x02", "name": "DisableRxAndEnableTx", "nameZh": "禁用收、启用发" },
+            { "value": "0x03", "name": "DisableRxAndTx", "nameZh": "禁用收发" }
+          ]
+        },
+        { "name": "communicationType", "role": "data", "offset": 2, "length": 1, "widget": "hex" }
+      ],
+      "positiveResponseForm": [
+        { "name": "controlType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" }
+      ]
+    },
+    {
+      "id": "0x2E",
+      "name": "WriteDataByIdentifier",
+      "nameZh": "按标识符写数据",
+      "shortEn": "WDBI",
+      "shortZh": "写DID",
+      "positiveResponseId": "0x6E",
+      "supportsFunctional": false,
+      "builtin": true,
+      "destructive": true,
+      "form": [
+        { "name": "dataIdentifier", "role": "did", "offset": 1, "length": 2, "widget": "didSelect" },
+        { "name": "dataRecord", "role": "data", "offset": 3, "length": -1, "widget": "hex" }
+      ],
+      "positiveResponseForm": [
+        { "name": "dataIdentifier", "role": "did", "offset": 1, "length": 2, "widget": "didSelect" }
+      ]
+    },
+    {
+      "id": "0x31",
+      "name": "RoutineControl",
+      "nameZh": "例程控制",
+      "shortEn": "RC",
+      "shortZh": "例程控制",
+      "positiveResponseId": "0x71",
+      "supportsFunctional": false,
+      "builtin": true,
+      "destructive": true,
+      "form": [
+        {
+          "name": "routineControlType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "StartRoutine", "nameZh": "启动例程" },
+            { "value": "0x02", "name": "StopRoutine", "nameZh": "停止例程" },
+            { "value": "0x03", "name": "RequestRoutineResults", "nameZh": "请求例程结果" }
+          ]
+        },
+        { "name": "routineIdentifier", "role": "data", "offset": 2, "length": 2, "widget": "hex" },
+        { "name": "routineControlOptionRecord", "role": "data", "offset": 4, "length": -1, "widget": "hex", "optional": true }
+      ],
+      "positiveResponseForm": [
+        { "name": "routineControlType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "routineIdentifier", "role": "data", "offset": 2, "length": 2, "widget": "hex" },
+        { "name": "routineStatusRecord", "role": "data", "offset": 4, "length": -1, "widget": "hex", "optional": true }
+      ]
+    },
+    {
+      "id": "0x34",
+      "name": "RequestDownload",
+      "nameZh": "请求下载",
+      "shortEn": "RD",
+      "shortZh": "请求下载",
+      "positiveResponseId": "0x74",
+      "supportsFunctional": false,
+      "builtin": true,
+      "enableIn": "P1",
+      "form": [
+        { "name": "dataFormatIdentifier", "role": "data", "offset": 1, "length": 1, "widget": "hex" },
+        { "name": "addressAndLengthFormatIdentifier", "role": "data", "offset": 2, "length": 1, "widget": "hex" },
+        { "name": "memoryAddressAndSize", "role": "data", "offset": 3, "length": -1, "widget": "hex" }
+      ],
+      "positiveResponseForm": [
+        { "name": "lengthFormatIdentifier", "role": "data", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "maxNumberOfBlockLength", "role": "data", "offset": 2, "length": -1, "widget": "hex" }
+      ]
+    },
+    {
+      "id": "0x35",
+      "name": "RequestUpload",
+      "nameZh": "请求上传",
+      "shortEn": "RU",
+      "shortZh": "请求上传",
+      "positiveResponseId": "0x75",
+      "supportsFunctional": false,
+      "builtin": true,
+      "enableIn": "P1",
+      "form": [
+        { "name": "dataFormatIdentifier", "role": "data", "offset": 1, "length": 1, "widget": "hex" },
+        { "name": "addressAndLengthFormatIdentifier", "role": "data", "offset": 2, "length": 1, "widget": "hex" },
+        { "name": "memoryAddressAndSize", "role": "data", "offset": 3, "length": -1, "widget": "hex" }
+      ],
+      "positiveResponseForm": [
+        { "name": "lengthFormatIdentifier", "role": "data", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "maxNumberOfBlockLength", "role": "data", "offset": 2, "length": -1, "widget": "hex" }
+      ]
+    },
+    {
+      "id": "0x36",
+      "name": "TransferData",
+      "nameZh": "数据传输",
+      "shortEn": "TD",
+      "shortZh": "传输数据",
+      "positiveResponseId": "0x76",
+      "supportsFunctional": false,
+      "builtin": true,
+      "enableIn": "P1",
+      "form": [
+        { "name": "blockSequenceCounter", "role": "data", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "transferRequestParameterRecord", "role": "data", "offset": 2, "length": -1, "widget": "hex", "optional": true }
+      ],
+      "positiveResponseForm": [
+        { "name": "blockSequenceCounter", "role": "data", "offset": 1, "length": 1, "widget": "number" },
+        { "name": "transferResponseParameterRecord", "role": "data", "offset": 2, "length": -1, "widget": "hex", "optional": true }
+      ]
+    },
+    {
+      "id": "0x37",
+      "name": "RequestTransferExit",
+      "nameZh": "请求退出传输",
+      "shortEn": "RTE",
+      "shortZh": "退出传输",
+      "positiveResponseId": "0x77",
+      "supportsFunctional": false,
+      "builtin": true,
+      "enableIn": "P1",
+      "form": [
+        { "name": "transferRequestParameterRecord", "role": "data", "offset": 1, "length": -1, "widget": "hex", "optional": true }
+      ],
+      "positiveResponseForm": [
+        { "name": "transferResponseParameterRecord", "role": "data", "offset": 1, "length": -1, "widget": "hex", "optional": true }
+      ]
+    },
+    {
+      "id": "0x3E",
+      "name": "TesterPresent",
+      "nameZh": "会话保持（TesterPresent）",
+      "shortEn": "TP",
+      "shortZh": "会话保持",
+      "positiveResponseId": "0x7E",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        {
+          "name": "zeroSubFunction",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x00", "name": "ZeroSubFunction", "nameZh": "需要正响应" },
+            { "value": "0x80", "name": "SuppressPositiveResponse", "nameZh": "抑制正响应" }
+          ]
+        }
+      ],
+      "positiveResponseForm": [
+        { "name": "zeroSubFunction", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" }
+      ]
+    },
+    {
+      "id": "0x85",
+      "name": "ControlDTCSetting",
+      "nameZh": "DTC 设置控制",
+      "shortEn": "CDS",
+      "shortZh": "DTC控制",
+      "positiveResponseId": "0xC5",
+      "supportsFunctional": true,
+      "builtin": true,
+      "form": [
+        {
+          "name": "dtcSettingType",
+          "role": "subFunction",
+          "offset": 1,
+          "length": 1,
+          "widget": "select",
+          "values": [
+            { "value": "0x01", "name": "On", "nameZh": "开启 DTC 记录" },
+            { "value": "0x02", "name": "Off", "nameZh": "关闭 DTC 记录" }
+          ]
+        }
+      ],
+      "positiveResponseForm": [
+        { "name": "dtcSettingType", "role": "subFunction", "offset": 1, "length": 1, "widget": "number" }
+      ]
+    }
+  ],
+  "didTable": [
+    { "id": "0xF180", "name": "BootSoftwareIdentification", "nameZh": "引导软件标识", "codec": "ascii", "builtin": true },
+    { "id": "0xF181", "name": "ApplicationSoftwareIdentification", "nameZh": "应用软件标识", "codec": "ascii", "builtin": true },
+    { "id": "0xF182", "name": "ApplicationDataIdentification", "nameZh": "应用数据标识", "codec": "ascii", "builtin": true },
+    { "id": "0xF183", "name": "BootSoftwareFingerprint", "nameZh": "引导软件指纹", "codec": "hex", "builtin": true },
+    { "id": "0xF184", "name": "ApplicationSoftwareFingerprint", "nameZh": "应用软件指纹", "codec": "hex", "builtin": true },
+    { "id": "0xF185", "name": "ApplicationDataFingerprint", "nameZh": "应用数据指纹", "codec": "hex", "builtin": true },
+    { "id": "0xF186", "name": "ActiveDiagnosticSession", "nameZh": "当前诊断会话", "codec": "uint8", "length": 1, "builtin": true },
+    { "id": "0xF187", "name": "VehicleManufacturerSparePartNumber", "nameZh": "整车厂备件号", "codec": "ascii", "builtin": true },
+    { "id": "0xF188", "name": "VehicleManufacturerECUSoftwareNumber", "nameZh": "整车厂 ECU 软件号", "codec": "ascii", "builtin": true },
+    { "id": "0xF189", "name": "VehicleManufacturerECUSoftwareVersionNumber", "nameZh": "整车厂 ECU 软件版本号", "codec": "ascii", "builtin": true },
+    { "id": "0xF18A", "name": "SystemSupplierIdentifier", "nameZh": "系统供应商标识", "codec": "ascii", "builtin": true },
+    { "id": "0xF18B", "name": "ECUManufacturingDate", "nameZh": "ECU 生产日期", "codec": "bcd", "length": 4, "builtin": true },
+    { "id": "0xF18C", "name": "ECUSerialNumber", "nameZh": "ECU 序列号", "codec": "ascii", "builtin": true },
+    { "id": "0xF190", "name": "VIN", "nameZh": "车辆识别代号", "codec": "ascii", "length": 17, "builtin": true },
+    { "id": "0xF191", "name": "VehicleManufacturerECUHardwareNumber", "nameZh": "整车厂 ECU 硬件号", "codec": "ascii", "builtin": true },
+    { "id": "0xF192", "name": "SystemSupplierECUHardwareNumber", "nameZh": "系统供应商 ECU 硬件号", "codec": "ascii", "builtin": true },
+    { "id": "0xF193", "name": "SystemSupplierECUHardwareVersionNumber", "nameZh": "系统供应商 ECU 硬件版本号", "codec": "ascii", "builtin": true },
+    { "id": "0xF194", "name": "SystemSupplierECUSoftwareNumber", "nameZh": "系统供应商 ECU 软件号", "codec": "ascii", "builtin": true },
+    { "id": "0xF195", "name": "SystemSupplierECUSoftwareVersionNumber", "nameZh": "系统供应商 ECU 软件版本号", "codec": "ascii", "builtin": true },
+    { "id": "0xF196", "name": "ExhaustRegulationOrTypeApprovalNumber", "nameZh": "排放/型式认证号", "codec": "ascii", "builtin": true },
+    { "id": "0xF197", "name": "SystemNameOrEngineType", "nameZh": "系统名称/发动机型号", "codec": "ascii", "builtin": true },
+    { "id": "0xF198", "name": "RepairShopCodeOrTesterSerialNumber", "nameZh": "维修站代码/诊断仪序列号", "codec": "hex", "builtin": true },
+    { "id": "0xF199", "name": "ProgrammingDate", "nameZh": "编程日期", "codec": "bcd", "length": 4, "builtin": true },
+    { "id": "0xF19A", "name": "CalibrationRepairShopCodeOrCalibrationEquipmentSerialNumber", "nameZh": "标定维修站代码/设备序列号", "codec": "hex", "builtin": true },
+    { "id": "0xF19B", "name": "CalibrationDate", "nameZh": "标定日期", "codec": "bcd", "length": 4, "builtin": true },
+    { "id": "0xF19E", "name": "ECUInstallationDate", "nameZh": "ECU 装配日期", "codec": "bcd", "length": 4, "builtin": true },
+    { "id": "0xF19F", "name": "ODXFileDataIdentifier", "nameZh": "ODX 文件标识", "codec": "hex", "builtin": true },
+    { "id": "0xF1A0", "name": "VehicleManufacturerECUHardwareVersionNumber", "nameZh": "整车厂 ECU 硬件版本号", "codec": "ascii", "builtin": true },
+    { "id": "0xF1A1", "name": "ECUConfigurationOrCustomizationData", "nameZh": "ECU 配置/定制数据", "codec": "hex", "builtin": true },
+    { "id": "0xF1A2", "name": "ECUConfigurationOrCustomizationData2", "nameZh": "ECU 配置/定制数据 2", "codec": "hex", "builtin": true },
+    { "id": "0xF1A3", "name": "ECUOriginalConfigurationData", "nameZh": "ECU 原始配置数据", "codec": "hex", "builtin": true },
+    { "id": "0xF1A4", "name": "ECUOriginalConfigurationData2", "nameZh": "ECU 原始配置数据 2", "codec": "hex", "builtin": true },
+    { "id": "0xF1A5", "name": "ProgrammingAttemptCounter", "nameZh": "编程尝试计数器", "codec": "uint8", "length": 1, "builtin": true }
+  ],
+  "dtcTable": [
+    { "code": "C01234", "nameZh": "示例故障：通信丢失", "severity": "error", "builtin": true },
+    { "code": "B10001", "nameZh": "示例故障：供电电压过低", "severity": "warn", "builtin": true }
+  ],
+  "keyAlgorithms": [
+    {
+      "id": "lib.ported.placeholder-l1",
+      "name": "占位移植算法（待替换为客户 代码）",
+      "type": "ported",
+      "algorithmId": "ported.placeholder.seedkey"
+    },
+    {
+      "id": "lib.constant.demo",
+      "name": "常量密钥（调试用）",
+      "type": "constant",
+      "params": { "keyHex": "5A 5A 5A 5A" }
+    },
+    {
+      "id": "lib.expression.xor5a",
+      "name": "逐字节异或 0x5A（位运算表达式）",
+      "type": "expression",
+      "params": {
+        "wordWidth": 8,
+        "endian": "big",
+        "steps": [{ "op": "xor", "maskHex": "5A" }]
+      }
+    },
+    {
+      "id": "lib.javascript.demo",
+      "name": "自定义 JS（沙箱，100ms 超时）",
+      "type": "javascript",
+      "source": "var out = new Uint8Array(seed.length);\nfor (var i = 0; i < seed.length; i++) {\n  out[i] = helpers.toU8(helpers.xor(seed[i], 0x5A));\n}\nreturn out;"
+    }
+  ],
+  "addressing": {
+    "testerLogicalAddress": "0x0E00",
+    "functionalAddress": "0x1FFF",
+    "aliases": [
+      { "address": "0x0E00", "alias": "Tester", "builtin": true },
+      { "address": "0x1000", "alias": "Gateway", "builtin": true },
+      { "address": "0x1001", "alias": "BCM", "builtin": true },
+      { "address": "0x1002", "alias": "EMS", "builtin": true },
+      { "address": "0x1003", "alias": "TCU", "builtin": true },
+      { "address": "0x1004", "alias": "IPC", "builtin": true },
+      { "address": "0x1FFF", "alias": "功能寻址", "builtin": true }
+    ]
+  }
+}

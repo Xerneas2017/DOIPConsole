@@ -1,0 +1,39 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+build/
+*.tsbuildinfo
+
+# 本地数据（用户可编辑服务库、工程文件、导出物）
+data/*.bak-*
+exports/
+~/.doip-console/
+
+# 日志
+*.log
+logs/
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 临时探针 / 一次性脚本（以点开头的文件一律不入库）
+.probe-*
+.diag-*
+.sim-up.*
+coverage/
+
+# QA 验证过程产物（截图 / 桩后端等，量大且可再生）
+scripts/qa-shots/
+
+# Agent 工作区（项目记忆等；保留在磁盘上，但不参与版本控制，避免噪声提交）
+.workbuddy/
+
+# 本机运行时落盘（服务库备份、导出物在 data/exports 下各自管理）
+.doip-backend.log
+.doip-backend.pid

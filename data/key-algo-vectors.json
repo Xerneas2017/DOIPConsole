@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "_comment": "★§3.9.2：算法注册后必须 100% 通过本文件绑定的向量（TC-K09，CI 强制）。当前客户 代码尚未提供，向量绑定到保留 id 'ported.customer.seedkey-l1'；该算法一旦注册，verifyAll() 会立即校验，未通过则 verified=false 且后端首屏下发 E_LIB_KEY_ALGO_UNVERIFIED。",
+  "bindings": {
+    "ported.customer.seedkey-l1": ["v1", "v2", "v3"]
+  },
+  "vectors": [
+    {
+      "id": "v1",
+      "level": 1,
+      "seedHex": "A1 B2 C3 D4",
+      "expectedKeyHex": "3C 4D 5E 6F",
+      "source": "客户提供（待导入）",
+      "note": "客户 代码到位后替换 ported.customer.seedkey-l1 的实现即可自动校验"
+    },
+    {
+      "id": "v2",
+      "level": 1,
+      "seedHex": "00 11 22 33",
+      "expectedKeyHex": "6B 7C 8D 9E",
+      "source": "客户提供（待导入）",
+      "note": "覆盖 seed 含 0x00 的边界，防止符号扩展误判"
+    },
+    {
+      "id": "v3",
+      "level": 1,
+      "seedHex": "DE AD BE EF",
+      "expectedKeyHex": "12 34 56 78",
+      "source": "客户提供（待导入）",
+      "note": "覆盖高位为 1 的字节，防止有符号右移（>>）误用"
+    }
+  ]
+}

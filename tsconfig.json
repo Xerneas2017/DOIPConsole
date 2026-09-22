@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@doip/shared": ["./shared/src/index.ts"]
+    },
+    /* ★M3：前端用 JSX + DOM；后端仍是 Node 环境，两者共存 */
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "shared/src/**/*.ts",
+    "server/src/**/*.ts",
+    "web/src/**/*.ts",
+    "web/src/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist/**"
+  ]
+}

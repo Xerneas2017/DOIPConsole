@@ -1,0 +1,479 @@
+classDiagram
+    direction LR
+
+    class DoipFrameReader {
+        -Buffer buf
+        -number len
+        -number off
+        -number firstByteAtMs
+        -FrameReaderOptions opts
+        +push(chunk) void
+        +tick() void
+        +reset() void
+        -drain() void
+        -tryParseOne() ParseResult
+        -fail(code, msg, recoverable) void
+    }
+
+    class DoipHeaderCodec {
+        +encodeHeader(pv, pt, len) Buffer
+        +decodeHeader(buf, off) DoipHeader
+        +isInverseVersionValid(pv, ipv) bool
+    }
+
+    class DoipPayloadCodec {
+        +decode(payloadType, payload) DoipPayload
+        +encode(payloadType, value) Buffer
+        +meta(payloadType) PayloadTypeMeta
+    }
+
+    class DoipClient {
+        -Socket socket
+        -SocketFactory factory
+        +connect(cfg) Promise
+        +sendRoutingActivation(cfg) Promise
+        +sendDiagnosticMessage(sa, ta, userData) void
+        +sendAliveCheck() Promise
+        +close() void
+        +onFrame callback
+        +onClose callback
+        +onError callback
+    }
+
+    class DoipUdpDiscovery {
+        +broadcastRequest(timeoutMs) Promise
+        +unicastRequest(ip, timeoutMs) Promise
+        +startPassiveListen(cb) void
+        +stopPassiveListen() void
+    }
+
+    class DoipEntityServer {
+        -net.Server server
+        -Map~string,VirtualEcu~ ecus
+        -FaultInjector injector
+        +start(port) Promise
+        +stop() void
+        -onConnection(socket) void
+        -onFrame(conn, frame) void
+        -routeDiagnostic(conn, payload) void
+    }
+
+    class DoipEntityUdp {
+        +start(port) Promise
+        +announce(count, intervalMs) void
+        -onMessage(msg, rinfo) void
+    }
+
+    class VirtualEcu {
+        -SimEntityConfig cfg
+        -number session
+        -Set~number~ unlocked
+        +handleUds(userData) HandleResult
+        +reset() void
+    }
+
+    class FaultInjector {
+        -FaultRule[] rules
+        +match(la, sid, sub, did) FaultRule
+        +consume(rule) void
+        +setRules(rules) void
+    }
+
+    class SimEcuRuntime {
+        -DoipEntityServer tcp
+        -DoipEntityUdp udp
+        -ChildProcess child
+        +start(cfg) Promise
+        +stop() void
+        +getStatus() SimStatus
+        +setFaultRules(rules) void
+        +patchEntity(la, patch) void
+    }
+
+    class Transaction {
+        +string txnId
+        +TxnState state
+        +number sa
+        +number ta
+        +seqRequest number
+        +seqAck number
+        +seqNack number
+        +seqResponses number[]
+        +functionalResponses ResponseRef[]
+        +latencyMs number
+        +gatewayForwardLatencyMs number
+    }
+
+    class TransactionManager {
+        -Map~string,Transaction~ byId
+        -Map~string,Transaction[]~ pending
+        -Transaction[] completedRing
+        +send(req) Promise~SendUdsResult~
+        +onAck(payload, seq) void
+        +onNack(payload, seq) void
+        +onDiagnosticMessage(payload, seq) void
+        +onSessionClosed(reason) void
+        -transition(t, next, note) void
+        -matchForResponse(sa, ta, userData) Transaction
+    }
+
+    class TxnMatchPolicy {
+        +keyOf(sa, ta) string
+        +expectPositiveSid(sid) number
+        +isNegativeResponse(userData) bool
+        +previousMessageMatches(prev, req) bool
+    }
+
+    class ConnectionManager {
+        -Map~string,DoipSession~ sessions
+        -string activeId
+        +connect(cfg) Promise
+        +reactivate() Promise
+        +disconnect(reason) Promise
+        +setTargetAddress(ta) void
+        +get(id) DoipSession
+        +list() SessionStatus[]
+    }
+
+    class DoipSession {
+        +string id
+        +DoipClient client
+        +DoipFrameReader reader
+        +TransactionManager txns
+        +TesterPresentScheduler tp
+        +UdsSessionTracker tracker
+        +SessionStateMachine fsm
+        +SessionStatus status
+        +onFrame(frame) void
+        +emitTrace(entry) void
+    }
+
+    class SessionStateMachine {
+        +current ConnectionState
+        +can(next) bool
+        +transition(next, reason) void
+        +onChange callback
+    }
+
+    class TesterPresentScheduler {
+        -Timeout timer
+        +enable(periodMs, sub) void
+        +disable() void
+        +sendOnce() void
+        +nextDueMs() number
+    }
+
+    class UdsSessionTracker {
+        +udsSession UdsSessionType
+        +securityLevels number[]
+        +s3RemainingMs number
+        +observe(entry) void
+        +onReset() void
+    }
+
+    class UdsLibraryStore {
+        -UdsLibrary lib
+        +load(path) void
+        +get() UdsLibrary
+        +update(next) ValidationResult
+        +importJson(text) ValidationResult
+        +exportJson() string
+        +onReload callback
+    }
+
+    class UdsDecoder {
+        +decode(userData, lib, role) UdsDecodeResult
+    }
+
+    class UdsEncoder {
+        +encode(def, values, lib) Buffer
+    }
+
+    class KeyAlgorithmRegistry {
+        -Map~string,PortedAlgorithm~ byId
+        +register(a) void
+        +get(id) PortedAlgorithm
+        +listForLevel(level) PortedAlgorithm[]
+        +verifyAll(vectors) VerifyReport
+    }
+
+    class PortedAlgorithm {
+        +string id
+        +string nameZh
+        +number[] appliesToLevels
+        +number seedLengthBytes
+        +number keyLengthBytes
+        +string origin
+        +bool verified
+        +compute(level, seed) Uint8Array
+    }
+
+    class KeyVectorVerifier {
+        +load(path) KeyVectorsFile
+        +verify(a, vectors) VerifyReport
+    }
+
+    class KeyAlgorithmEngine {
+        -KeyAlgorithmRegistry registry
+        -Map~string,vm.Script~ cache
+        +compute(spec, ctx) Buffer
+        -ported(spec, ctx) Buffer
+        -constant(spec, ctx) Buffer
+        -bitwise(spec, ctx) Buffer
+        -javascript(spec, ctx) Buffer
+    }
+
+    class RollingFileSink {
+        -WriteStream stream
+        -string sessionDir
+        -number partIndex
+        -LogFileInfo[] files
+        -number droppedCount
+        +start(cfg) Promise
+        +stop() Promise
+        +onEntry(entry) void
+        +getStatus() RecordingStatus
+        -roll(reason) void
+        -flushBatch() void
+        -fail(code) void
+    }
+
+    class SecurityAccessFlow {
+        +unlock(level, algoId) Promise~UnlockResult~
+        -requestSeed(level) Promise~Buffer~
+        -sendKey(level, key) Promise~bool~
+    }
+
+    class TraceEntryBuilder {
+        +fromFrame(frame, ctx, lib, txn) TraceEntry
+        +fromTxnTimeout(txn) TraceEntry
+    }
+
+    class TraceStore {
+        -RingBuffer~TraceEntry~ ring
+        -number nextSeq
+        +append(entry) number
+        +since(fromSeq) TraceEntry[]
+        +snapshot(n) TraceEntry[]
+        +clear() void
+        +stats() StoreStats
+    }
+
+    class EventBus {
+        -number seq
+        +emit(event) number
+        +onEvent callback
+    }
+
+    class BatchFlusher {
+        -StreamEvent[] queue
+        +enqueue(e) void
+        +flush() void
+    }
+
+    class BackpressureGuard {
+        +level number
+        +isSaturated() bool
+        +onSaturated(count) void
+        +onDrained() void
+    }
+
+    class ResyncService {
+        +resync(fromSeq) void
+        +sendSnapshot() void
+    }
+
+    class WsServer {
+        +start(httpServer) void
+        +broadcast(env) void
+        -onUpgrade(req, socket) void
+        -heartbeat() void
+    }
+
+    class RequestRouter {
+        +route(ws, cmd) Promise
+        -ack(ws, id, ok, err) void
+    }
+
+    class Exporters {
+        +exportAs(format, entries, req) Buffer
+    }
+
+    DoipSession *-- DoipClient
+    DoipSession *-- DoipFrameReader
+    DoipSession *-- TransactionManager
+    DoipSession *-- TesterPresentScheduler
+    DoipSession *-- UdsSessionTracker
+    DoipSession *-- SessionStateMachine
+    DoipClient ..> DoipFrameReader : socket data
+    DoipClient ..> DoipHeaderCodec
+    DoipClient ..> DoipPayloadCodec
+    DoipFrameReader ..> DoipHeaderCodec
+    ConnectionManager o-- DoipSession
+    TransactionManager o-- Transaction
+    TransactionManager ..> TxnMatchPolicy
+    TransactionManager ..> UdsDecoder
+    SecurityAccessFlow ..> TransactionManager
+    SecurityAccessFlow ..> KeyAlgorithmEngine
+    KeyAlgorithmEngine ..> KeyAlgorithmRegistry
+    KeyAlgorithmRegistry o-- PortedAlgorithm
+    KeyVectorVerifier ..> PortedAlgorithm
+    KeyVectorVerifier ..> KeyAlgorithmRegistry
+    EventBus ..> RollingFileSink
+    TraceEntryBuilder ..> UdsDecoder
+    TraceEntryBuilder ..> Transaction
+    DoipSession ..> TraceEntryBuilder
+    TraceStore o-- EventBus
+    EventBus ..> BatchFlusher
+    BatchFlusher ..> BackpressureGuard
+    BatchFlusher ..> WsServer
+    WsServer ..> RequestRouter
+    RequestRouter ..> ConnectionManager
+    RequestRouter ..> UdsLibraryStore
+    RequestRouter ..> SimEcuRuntime
+    RequestRouter ..> ResyncService
+    RequestRouter ..> Exporters
+    ResyncService ..> TraceStore
+    Exporters ..> TraceStore
+    SimEcuRuntime *-- DoipEntityServer
+    SimEcuRuntime *-- DoipEntityUdp
+    SimEcuRuntime *-- FaultInjector
+    DoipEntityServer o-- VirtualEcu
+    DoipEntityServer ..> FaultInjector
+    DoipEntityServer ..> DoipFrameReader
+    DoipEntityServer ..> DoipPayloadCodec
+    UdsLibraryStore ..> UdsDecoder
+    UdsLibraryStore ..> TraceStore : repatch
+
+---
+
+classDiagram
+    direction TB
+
+    class WsClient {
+        -WebSocket ws
+        -number lastSeq
+        -number retries
+        +connect(url) void
+        +send(cmd) void
+        +onEvent callback
+        +onState callback
+        -scheduleReconnect() void
+        -detectGap(seq) void
+    }
+
+    class useTraceStore {
+        -TraceEntry[] ring
+        -number minSeq
+        -number maxSeq
+        +ingest(batch) void
+        +applyGap(gap) void
+        +resyncFrom(seq) void
+        +filtered(expr) TraceEntry[]
+        +clear() void
+    }
+
+    class useConnectionStore {
+        +SessionStatus status
+        +DiscoveredEntity[] entities
+        +applyStatus(s) void
+        +applyScan(list) void
+    }
+
+    class useLibraryStore {
+        +UdsLibrary lib
+        +applySnapshot(lib) void
+        +edit(path, value) void
+        +commit() void
+    }
+
+    class useSimStore {
+        +SimStatus status
+        +FaultRule[] rules
+        +commitRules() void
+    }
+
+    class useUiStore {
+        +columns Columns
+        +autoFollow bool
+        +favorites Favorite[]
+        +persist() void
+    }
+
+    class TraceTable {
+        +rows TraceEntry[]
+        +render() Element
+    }
+
+    class DecodeTree {
+        +entry TraceEntry
+        +render() Element
+    }
+
+    class RequestPanel {
+        +mode string
+        +draft RequestDraft
+        +send() void
+    }
+
+    class SecurityAccessPanel {
+        +level number
+        +algoId string
+        +unlock() void
+    }
+
+    class StatusBar {
+        +status SessionStatus
+        +render() Element
+    }
+
+    class LibraryEditor {
+        +lib UdsLibrary
+        +save() void
+    }
+
+    class FilterBar {
+        +expr string
+        +apply(expr) void
+    }
+
+    class RecordToggle {
+        +RecordingStatus rec
+        +toggle() void
+        +openDir() void
+    }
+
+    class displayStrings {
+        +shortServiceName(def) string
+        +shortDidName(did) string
+        +nrcLabel(nrc) string
+    }
+
+    class filterExpression {
+        +parse(expr) AstNode
+        +eval(ast, entry) bool
+    }
+
+    class colorRules {
+        +rowClass(entry) string
+    }
+
+    WsClient ..> useTraceStore : trace.batch / gap
+    WsClient ..> useConnectionStore : status / scan.result
+    WsClient ..> useLibraryStore : library.snapshot
+    WsClient ..> useSimStore : sim.status
+    WsClient ..> RecordToggle : trace.logfile
+    useTraceStore ..> TraceTable
+    useTraceStore ..> DecodeTree
+    useConnectionStore ..> StatusBar
+    useConnectionStore ..> RequestPanel
+    useLibraryStore ..> RequestPanel
+    useLibraryStore ..> LibraryEditor
+    useSimStore ..> useConnectionStore
+    useUiStore ..> TraceTable
+    TraceTable ..> colorRules
+    TraceTable ..> displayStrings
+    DecodeTree ..> displayStrings
+    FilterBar ..> filterExpression
+    useTraceStore ..> filterExpression
+    RequestPanel ..> SecurityAccessPanel

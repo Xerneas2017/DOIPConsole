@@ -1,0 +1,37 @@
+{
+  "name": "doip-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DoIP 诊断控制台 — DoIP/UDS 诊断工具（npm workspaces: shared / server / web）",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run test --workspace @doip/server && npm run test --workspace @doip/web",
+    "test:watch": "npm run test:watch --workspace @doip/server",
+    "dev": "npm run dev --workspace @doip/web",
+    "build": "npm run build --workspace @doip/web",
+    "start": "npm run build && node --import tsx server/src/index.ts",
+    "start:only": "node --import tsx server/src/index.ts",
+    "sim:up": "node scripts/sim-up.mjs",
+    "interop": "python3 scripts/interop-python-doipclient.py",
+    "smoke": "node scripts/smoke.mjs",
+    "check:timeouts": "node scripts/check-no-hardcoded-timeout.mjs",
+    "verify": "npm run typecheck && npm run check:timeouts && npm test && npm run smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.18.1",
+    "pino-pretty": "^13.1.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
