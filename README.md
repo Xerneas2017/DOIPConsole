@@ -94,6 +94,35 @@ npm run interop    # 用 python-doipclient 跑 11 项互操作检查
 
 **顺带修的诊断性问题**：仿真侧"收到帧但处理不了"原本是 `debug` 级日志，默认 `info` 下完全不可见——这正是问题 1 只能靠抓包才定位到的原因。现在改为 `warn` 并带上原始字节。**同时给这类 warn 加了排除名单**：实体自身方向的报文（公告 `0x0004`、状态响应等）会回环到自己 socket，属于正常现象，不能刷屏。
 
+## 版本控制
+
+项目已纳入 Git（`main` 分支）。首次提交包含全部源码、文档与脚本，共 174 个文件。
+
+```bash
+git log --oneline        # 查看提交
+git status               # 工作区状态
+git diff                 # 未提交的改动
+```
+
+**被忽略的**（见 `.gitignore`）：`node_modules/`、`dist/`、日志、QA 验证产物（`scripts/qa-shots/`）、
+以点开头的临时探针、以及 `.workbuddy/`（Agent 工作区，保留在磁盘但不入库，避免噪声提交）。
+
+### 提交身份
+
+首次提交用的是占位身份（`Xerneas2017@users.noreply.github.com`）。建议改成你自己的：
+
+```bash
+git config user.name  "你的名字"
+git config user.email "you@example.com"
+# 若要把已有的提交也改成新身份（会重写历史，仅本地仓库未推送时可做）：
+git rebase --root --exec 'git commit --amend --reset-author --no-edit'
+```
+
+### 建议的后续用法
+
+这个项目的门禁很严（`npm run verify` 会串跑 typecheck / 超时守卫 / 单测 / 端到端冒烟），
+建议每次改动后先 `npm run verify` 再提交，保证 `main` 始终可运行。
+
 ## 排查：运行日志（自我排查）
 
 后端日志会**同时**写入终端与文件：`~/.doip-console/logs/backend-YYYYMMDD.log`（单文件 16 MiB 上限，保号续写，保留最近 14 个）。
