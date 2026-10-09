@@ -125,7 +125,13 @@ export function ServiceRequestPanel(): JSX.Element {
     return null;
   }, [previewHex]);
 
-  const isDestructive = svc?.destructive === true || (mode === 'raw' && isDestructiveHex(previewHex));
+  /**
+   * ★#4（交叉评审① + 评审裁定进本批）：危险判定不再限定 raw 模式——
+   * 两模式 doSend 发的是同一份 previewHex（最终上线字节），按字节判定即与后端
+   * describeDestructive 完全同构；库内置 0x27 表单（未标 destructive 的 SendKey 选项）
+   * 也先弹 B17，而不是静默被后端 E_UDS_CONFIRM_REQUIRED 拒发。
+   */
+  const isDestructive = isDestructiveRequest(svc, previewHex);
 
   const stopPeriodic = useCallback(() => {
     if (timerRef.current !== null) {
@@ -497,4 +503,16 @@ export function isDestructiveHex(hex: string): boolean {
     return sub !== null && sub % 2 === 0;
   }
   return false;
+}
+
+/**
+ * ★#4 组合口径（纯函数，供单测直接打）：库标记 destructive 或**最终字节危险**都算。
+ * 与模式无关——表单模式经 buildRequestHex 产出的也是同一份上线字节（交叉评审①的教训：
+ * 库内置 0x27 表单可能未标 destructive，必须靠字节判定兜住）。
+ */
+export function isDestructiveRequest(
+  svc: { destructive?: boolean } | null,
+  previewHex: string,
+): boolean {
+  return svc?.destructive === true || isDestructiveHex(previewHex);
 }
