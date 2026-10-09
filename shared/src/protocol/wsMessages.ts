@@ -62,6 +62,12 @@ export const SendUdsRequestSchema = z.object({
   rawHex: z.string().optional(),
   /** 默认 true */
   expectResponse: z.boolean().optional(),
+  /**
+   * ★P0#4 契约（与后端 UdsService 门禁同口径）：危险请求（0x11/0x14/0x2E/0x31 +
+   * 0x27 偶数子功能）未带 confirmed:true 一律被后端 E_UDS_CONFIRM_REQUIRED 拒绝，
+   * 原始 hex 与表单同权，不得绕过。
+   */
+  confirmed: z.boolean().optional(),
   p2TimeoutMs: z.number().optional(),
   p2StarTimeoutMs: z.number().optional(),
   /** 如 '周期3E' */
