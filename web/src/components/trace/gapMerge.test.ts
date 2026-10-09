@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TraceEntry } from '@doip/shared';
-import { mergeGapRows } from './gapMerge';
+import { buildDisplayRows, mergeGapRows } from './gapMerge';
 import type { SeqGap } from './gapMerge';
 
 /**
@@ -71,10 +71,34 @@ describe('D-01 — 缺口灰条插入', () => {
     expect(shape(rows)).toEqual(['E1', 'G2+1(local)', 'E4']);
   });
 
-  it('过滤后的 rows 也要正确：缺口按可见行的 seq 推演，不是按全量', () => {
-    // 只留偶数 seq（模拟过滤）→ 3 与 5 之间应出现覆盖 4 的灰条
-    const rows = mergeGapRows([entry(3), entry(5), entry(5 + 1)], []);
-    expect(shape(rows)).toEqual(['E3', 'G4+0(local)', 'E5', 'E6']);
+  it('★P0-FE#5 回归：被过滤掉的真实条目绝不造假灰条（旧测试固化过此错误）', () => {
+    // 全量 1..6 完整无缺；过滤后只见 3、5、6 —— 不该出现任何灰条
+    const full = [entry(1), entry(2), entry(3), entry(4), entry(5), entry(6)];
+    const visible = [entry(3), entry(5), entry(6)];
+    const rows = buildDisplayRows(full, visible, []);
+    expect(shape(rows)).toEqual(['E3', 'E5', 'E6']);
+  });
+
+  it('★P0-FE#5 回归：真实缺口在过滤视图里仍显示，且 count 按数据链而非可见行', () => {
+    // 全量：1..4 到、丢 5、6..8 到；过滤只剩 2、7 → E2 G5..6? 不对——5 是真缺口、6 被过滤
+    const full = [entry(1), entry(2), entry(3), entry(4), entry(6), entry(7), entry(8)];
+    const visible = [entry(2), entry(7)];
+    const rows = buildDisplayRows(full, visible, []);
+    // 可见 2 与 7 之间：真缺口 5（灰条裁剪到 (2,7) 开区间 → 5..5，被过滤的 6 不造假）
+    expect(shape(rows)).toEqual(['E2', 'G5+0(local)', 'E7']);
+  });
+
+  it('★P0-FE#5 裁剪：store 缺口与真实条目重叠时灰条让位分段，绝不压住可见行', () => {
+    const full = [entry(1), entry(5), entry(9)];
+    const badGap: SeqGap = { fromSeq: 3, toSeq: 7, count: 5, reason: 'overflow' };
+    const rows = buildDisplayRows(full, full, [badGap]);
+    // store 谎称缺 3..7，但 5 真实存在 → 让位分段；2/5 之外真实缺失号全覆盖
+    expect(shape(rows)).toEqual(['E1', 'G2+2(local)', 'E5', 'G6+1(overflow)', 'G8+0(local)', 'E9']);
+    const entrySeqs = rows.filter((r) => r.kind === 'entry').map((r) => (r.kind === 'entry' ? r.seq : -1));
+    for (const r of rows) {
+      if (r.kind !== 'gap') continue;
+      for (let s = r.seq; s < r.seq + r.count; s++) expect(entrySeqs).not.toContain(s);
+    }
   });
 
   it('空表与单条不产生灰条', () => {

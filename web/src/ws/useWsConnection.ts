@@ -36,7 +36,8 @@ function ensureClient(): WsClient {
     url: defaultWsUrl(),
     onStatus: (status: WsClientStatus, detail?: string) => {
       const store = useConnectionStore.getState();
-      store.setWsStatus(status);
+      // ★裁定①：断线归因（detail）随状态一起入 store，UI 必须能看见"为什么断、是否在自动重连"
+      store.setWsStatus(status, detail ?? null);
       // ★D-03：断开/重连中 → 上一轮的连接状态、路由激活码、会话、解锁等级、
       //   仿真运行状态、录盘状态全部作废，UI 必须显示"未知"而不是陈旧的"已激活"。
       if (status === 'closed' || status === 'reconnecting') {

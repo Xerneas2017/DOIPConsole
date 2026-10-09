@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Box, Paper, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import { TIMING } from '@doip/shared';
 import { sendCommand } from '../../ws/useWsConnection';
-import { useConnectionStore } from '../../store/useConnectionStore';
+import { useConnectionStore, WS_STATUS_LABEL } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
 
 /**
@@ -12,6 +12,8 @@ import { useUiStore } from '../../store/useUiStore';
 export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): JSX.Element {
   const status = useConnectionStore((s) => s.status);
   const wsStatus = useConnectionStore((s) => s.wsStatus);
+  /** ★裁定①：断线归因文案（null=无异常） */
+  const wsDetail = useConnectionStore((s) => s.wsDetail);
   const scanning = useConnectionStore((s) => s.scanning);
   /** ★仿真是否在跑：决定「连接」要不要先自动启动仿真 */
   const simRunning = useConnectionStore((s) => s.sim?.running ?? false);
@@ -214,19 +216,39 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
         服务库
       </button>
 
-      <Tooltip title={`WebSocket：${wsStatus}`}>
-        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      {/**
+       * ★裁定①：WS 状态 + 断线归因必须显式可见。
+       * 自动重连保留（传输层豁免），但"为什么断、第几次尝试、不会补发业务请求"要写在界面上，
+       * 让用户始终知道当前数据是否可信。
+       */}
+      <Tooltip
+        title={
+          wsDetail === null
+            ? `WebSocket：${WS_STATUS_LABEL[wsStatus]}（${wsStatus}）`
+            : `WebSocket：${WS_STATUS_LABEL[wsStatus]}（${wsStatus}）\n${wsDetail}`
+        }
+      >
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
           <Box
             sx={{
               width: 8,
               height: 8,
               borderRadius: '50%',
+              flexShrink: 0,
               bgcolor: wsStatus === 'open' ? 'success.main' : wsStatus === 'closed' ? 'error.main' : 'warning.main',
             }}
           />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {wsStatus}
+          <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+            {WS_STATUS_LABEL[wsStatus]}
           </Typography>
+          {wsDetail !== null ? (
+            <Typography
+              variant="caption"
+              sx={{ color: wsStatus === 'closed' ? 'error.main' : 'warning.main', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}
+            >
+              {wsDetail}
+            </Typography>
+          ) : null}
         </Box>
       </Tooltip>
     </Paper>
