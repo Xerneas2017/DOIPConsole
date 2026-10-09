@@ -39,6 +39,8 @@ export interface RoutingActivationResult {
   code: number;
   codeName: string;
   codeNameZh: string;
+  /** 码表处置建议（0x00–0x04 拒绝码的排查提示；无则 null） */
+  hintZh: string | null;
   testerLogicalAddress: number;
   doipEntityLogicalAddress: number;
   reservedOem: Uint8Array;
@@ -85,11 +87,18 @@ export class DoipClient {
   private closedReason: string | null = null;
 
   readonly protocolVersion: number;
-  readonly activationType: number;
+  /**
+   * 激活类型。★可变：`connect(cfg)` 携带的 activationType 必须覆盖构造默认值——
+   * 曾因只写进 `options` 而 `sendRoutingActivation()` 读的是本字段，配置永不生效（审计 P1-1）。
+   */
+  activationType: number;
   /** 本端逻辑地址（SA） */
   sa: number;
   /** 当前目标地址（TA），可由上层切换而不重建连接（Q4） */
   ta: number;
+
+  /** connect 进行中标记（防双击/双客户端并发 connect 造成旧 socket 泄漏，审计 P0-2） */
+  private connecting = false;
 
   constructor(options: DoipClientOptions = {}) {
     this.options = options;
@@ -124,22 +133,33 @@ export class DoipClient {
     return { host: this.socket.remoteAddress ?? '', port: this.socket.remotePort ?? 0 };
   }
 
-  /** 建立 TCP 连接（不激活路由） */
+  /** 建立 TCP 连接（不激活路由）。★已有/进行中的连接一律显式回错，绝不静默重建（审计 P0-2） */
   async connect(cfg: ConnectConfig): Promise<void> {
-    const sa = parseLogicalAddress(cfg.sa);
-    const ta = parseLogicalAddress(cfg.ta);
-    const socket = await this.factory.connect({
-      host: cfg.host,
-      port: cfg.port,
-      timeoutMs: getTiming('TCP_CONNECT_TIMEOUT_MS'),
-    });
-    this.sa = sa;
-    this.ta = ta;
-    if (cfg.activationType !== undefined) {
-      // activationType 为字符串码（'0x00'），仅覆盖实例默认值
-      this.options.activationType = parseCode(cfg.activationType);
+    if (this.isConnected()) {
+      throw new AppError('E_CONN_ALREADY_CONNECTED', '已有活动连接，请先断开再连接');
     }
-    this.attach(socket);
+    if (this.connecting) {
+      throw new AppError('E_CONN_CONNECTING', '上一次连接尚未完成，请勿重复发起');
+    }
+    this.connecting = true;
+    try {
+      const sa = parseLogicalAddress(cfg.sa);
+      const ta = parseLogicalAddress(cfg.ta);
+      const socket = await this.factory.connect({
+        host: cfg.host,
+        port: cfg.port,
+        timeoutMs: getTiming('TCP_CONNECT_TIMEOUT_MS'),
+      });
+      this.sa = sa;
+      this.ta = ta;
+      if (cfg.activationType !== undefined) {
+        // ★审计 P1-1：写入实例字段（sendRoutingActivation 默认参数读的是 this.activationType）
+        this.activationType = parseCode(cfg.activationType);
+      }
+      this.attach(socket);
+    } finally {
+      this.connecting = false;
+    }
   }
 
   /** 手动重激活（★Q1 唯一允许的"重试"）：同一 socket 重发 0x0005 */
@@ -240,6 +260,16 @@ export class DoipClient {
   }
 
   private attach(socket: Socket): void {
+    // ★审计 P0-2/P1-3 兜底：attach 前必须清场——旧 socket 不关会泄漏，且其迟到的
+    //   'close' 事件会把新连接标记关闭（"幽灵断线"）；残留半帧会毒化新连接的字节流。
+    if (this.socket !== null && !this.socket.destroyed) {
+      this.log.warn('attach 时发现旧 socket 未关闭，强制清理', {
+        peer: `${this.socket.remoteAddress ?? '?'}:${this.socket.remotePort ?? 0}`,
+      });
+      this.socket.removeAllListeners('close');
+      this.socket.destroy();
+    }
+    this.reader.reset();
     this.closedReason = null;
     this.socket = socket;
     socket.on('data', (chunk: Buffer) => {
@@ -363,6 +393,7 @@ export class DoipClient {
       code: value.routingActivationResponseCode,
       codeName: desc.name,
       codeNameZh: desc.nameZh,
+      hintZh: desc.hint ?? null,
       testerLogicalAddress: value.testerLogicalAddress,
       doipEntityLogicalAddress: value.doipEntityLogicalAddress,
       reservedOem: value.reservedOem,

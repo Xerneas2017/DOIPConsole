@@ -129,6 +129,8 @@ export class SecurityAccessFlow {
       addressing: 'physical',
       rawHex: formatHex(UdsEncoder.securityAccessBytes(sendKey, keyBytes)),
       tag: '0x27发送密钥',
+      // ★#4：解锁向导本身已由用户在选择安全等级时确认——内部流程显式放行（原始 hex 也过门禁）
+      confirmed: true,
     });
     if (!keyReq.ok) {
       return {

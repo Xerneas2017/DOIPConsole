@@ -62,6 +62,13 @@ export const SendUdsRequestSchema = z.object({
   rawHex: z.string().optional(),
   /** 默认 true */
   expectResponse: z.boolean().optional(),
+  /**
+   * ★Phase 0 #4：危险操作二次确认契约（与前端确认弹窗同口径）。
+   * 危险请求 = SID 0x11/0x14/0x2E/0x31 + 0x27 偶数子功能（发送密钥）。
+   * 后端 `UdsService.sendUdsRequest()` 强制门禁：未带 confirmed:true 一律拒绝，
+   * **原始 hex 模式同样生效，不得绕过**；内部专用流程（0x27 解锁向导等）显式传 confirmed:true。
+   */
+  confirmed: z.boolean().optional(),
   p2TimeoutMs: z.number().optional(),
   p2StarTimeoutMs: z.number().optional(),
   /** 如 '周期3E' */

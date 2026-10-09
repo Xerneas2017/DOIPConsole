@@ -16,6 +16,8 @@ export const TIMING = {
   /* DoIP 传输层确认 */
   ACK_WAIT_TIMEOUT_MS: 2000, // 发出 0x8001 后等 0x8002/0x8003 的上限
   ALIVE_CHECK_TIMEOUT_MS: 500,
+  /** ★#8：`expectResponse=false` 事务终态后，其迟到 ACK 的静默吞掉窗口 */
+  FIRE_AND_FORGET_ACK_TTL_MS: 3000,
 
   /* UDS 应用层超时 */
   P2_CLIENT_MS: 200, // 请求 → 首响应
