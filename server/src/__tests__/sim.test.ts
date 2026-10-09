@@ -452,11 +452,28 @@ describe('TC-S07 互操作补充：0x0007 保活 与 0x4001 实体状态', () =>
   });
 
   it('UDP 0x4001 → 0x4002：7 字节，且 maxDataSize 与 LIMITS 常量一致', async () => {
-    const sock = dgram.createSocket('udp4');
     const req = DoipHeaderCodec.buildFrame(0x02, PayloadType.ENTITY_STATUS_REQ, Buffer.alloc(0));
-    sock.send(req, extraPort, '127.0.0.1');
-    const [msg] = (await once(sock, 'message')) as [Buffer];
-    sock.close();
+    const askEntityStatus = async (): Promise<Buffer> => {
+      const sock = dgram.createSocket('udp4');
+      try {
+        sock.send(req, extraPort, '127.0.0.1');
+        const [m] = (await once(sock, 'message')) as [Buffer];
+        return m;
+      } finally {
+        sock.close();
+      }
+    };
+    /**
+     * ★并发负载下的有界等待：上一条用例 `socket.destroy()` 后，仿真服务端收到 'close'
+     * 并回收计数的时机不受测试控制——CPU 争用时可能晚于本次 UDP 查询，
+     * currentlyOpenSockets 会短暂读到 1。轮询到 0（或超时）再断言，消除时序抖动。
+     */
+    const deadline = Date.now() + 3000;
+    let msg = await askEntityStatus();
+    while (msg.readUInt8(10) !== 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+      msg = await askEntityStatus();
+    }
 
     const header = DoipHeaderCodec.decodeHeader(msg, 0);
     expect(header.payloadType).toBe(PayloadType.ENTITY_STATUS_RES);

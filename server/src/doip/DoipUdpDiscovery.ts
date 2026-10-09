@@ -89,9 +89,20 @@ export class DoipUdpDiscovery {
   async scan(opts: ScanOptions = {}): Promise<ScanResult> {
     const port = opts.port ?? this.port;
     const timeoutMs = opts.timeoutMs ?? getTiming('UDP_ANNOUNCE_LISTEN_MS');
+    /**
+     * ★审计 P2（#9）：曾因回调写成 `() => undefined`，被动监听收到的 0x0004 公告
+     * 全部被丢弃，passive 扫描永远只有主动请求的结果。这里按与主动请求相同的
+     * key 去重并入 collected（不动 request() 内部的重置时机，避免竞态丢帧）。
+     */
+    const passiveEntities = new Map<string, DiscoveredEntity>();
+    let passiveRequested = false;
     if (opts.passive === true) {
+      passiveRequested = true;
       try {
-        this.startPassiveListen(() => undefined, port);
+        this.startPassiveListen((entity) => {
+          const key = `${entity.vin}|${entity.logicalAddress}|${entity.ip}`;
+          if (!passiveEntities.has(key)) passiveEntities.set(key, entity);
+        }, port);
       } catch (err) {
         this.log.warn('被动监听启动失败，降级为仅主动请求', {
           message: err instanceof Error ? err.message : String(err),
@@ -102,7 +113,17 @@ export class DoipUdpDiscovery {
       ? await this.unicastRequest(opts.targetIp, timeoutMs, port)
       : await this.broadcastRequest(timeoutMs, port);
     this.stopPassiveListen();
-    return { entities, partial: this.degraded };
+    // 合并被动公告（可能与主动响应重复同一台，按 key 去重）
+    const merged = [...entities];
+    const seen = new Set(entities.map((e) => `${e.vin}|${e.logicalAddress}|${e.ip}`));
+    for (const [key, entity] of passiveEntities) {
+      if (!seen.has(key)) merged.push(entity);
+    }
+    /**
+     * `partial` 语义（★与前端注释同步）：true = 本次结果可能不全。
+     * 广播被降级（只能单播+回环）或开了被动监听（监听窗口外的公告必然错过）都算。
+     */
+    return { entities: merged, partial: this.degraded || passiveRequested };
   }
 
   /** 被动监听 0x0004 公告 */

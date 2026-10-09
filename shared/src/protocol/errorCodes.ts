@@ -83,6 +83,20 @@ export const ERROR_CODES: Record<string, ErrorCodeDef> = {
   E_CONN_EPIPE: def('E_CONN_EPIPE', '写入失败：连接已断开', 'error', true, '连接已被对端关闭，请重新连接'),
   E_CONN_NOT_CONNECTED: def('E_CONN_NOT_CONNECTED', '当前没有已建立的 DoIP 连接', 'warn', true, '请先连接并激活路由'),
   E_CONN_INVALID_CONFIG: def('E_CONN_INVALID_CONFIG', '连接参数非法', 'error', false, '检查 SA/TA/协议版本/激活类型的填写'),
+  E_CONN_ALREADY_CONNECTED: def(
+    'E_CONN_ALREADY_CONNECTED',
+    '已有活动连接（或连接进行中），拒绝重复发起',
+    'error',
+    false,
+    '★绝不静默重建旧连接（审计 P0-2）：请先断开，再重新连接',
+  ),
+  E_CONN_CONNECTING: def(
+    'E_CONN_CONNECTING',
+    '上一次连接尚未完成',
+    'warn',
+    true,
+    '等本次连接出结果（成功或报错）后再操作',
+  ),
   E_ROUTING_TIMEOUT: def(
     'E_ROUTING_TIMEOUT',
     '路由激活响应超时',
@@ -128,6 +142,13 @@ export const ERROR_CODES: Record<string, ErrorCodeDef> = {
     '★网关未转发（非 UDS 层错误）：不要按 NRC 排查，请查 NACK 码含义',
   ),
   E_TXN_CANCELLED: def('E_TXN_CANCELLED', '事务被取消（连接断开或用户取消）', 'warn', true, '重新连接后重发'),
+  E_UDS_CONFIRM_REQUIRED: def(
+    'E_UDS_CONFIRM_REQUIRED',
+    '危险操作未确认，已被后端拦截',
+    'error',
+    false,
+    '危险操作 = 0x11 复位 / 0x14 清DTC / 0x2E 写DID / 0x31 例程 / 0x27 发送密钥；请在确认弹窗中确认后重发（原始 hex 同样受此门禁）',
+  ),
   E_TXN_ACK_PREVIOUS_MISMATCH: def(
     'E_TXN_ACK_PREVIOUS_MISMATCH',
     'ACK 回显的 previousMessage 与本端请求不一致',

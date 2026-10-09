@@ -191,14 +191,20 @@ export class DoipSession {
 
   /** 建 TCP 连接 → 路由激活；任一步失败都进入 ERROR（★不自动重连） */
   async connect(cfg: ConnectConfig): Promise<SessionStatus> {
+    // ★审计 P0-2：重复 connect 显式回错（双标签页/双击场景），不做静默重建
+    if (this.client.isConnected() || this.state.state === 'TCP_CONNECTING' || this.state.state === 'ROUTING_ACTIVATING') {
+      throw new AppError('E_CONN_ALREADY_CONNECTED', '已有连接或连接进行中，请先断开再连接');
+    }
     // ★D-05：相对时间基准 = 本次连接建立的时刻（重连重新起算）
     this.sessionStartedAtMs = nowEpochMs();
     this.state.transition('TCP_CONNECTING', `连接 ${cfg.host}:${cfg.port}`);
     this.emitStatus();
     const ta = parseLogicalAddress(cfg.ta);
-    this.txns.setAddresses(this.client.sa, ta);
     try {
       await this.client.connect(cfg);
+      // ★审计 P1-2：必须在 connect 成功**之后**取 SA——此前在 connect 前调用，
+      //   拿到的是旧/默认 SA，出现"激活用新 SA、发报文用旧 SA"→ 真实网关 NACK 0x02
+      this.txns.setAddresses(this.client.sa, ta);
       this.peer = { host: cfg.host, port: cfg.port, mode: cfg.mode };
       this.tracker.reset('new-connection');
       this.state.transition('TCP_CONNECTED', 'TCP 已建立');
@@ -206,7 +212,8 @@ export class DoipSession {
       await this.activateRouting();
     } catch (err) {
       const appErr = err instanceof AppError ? err : fromNodeError(err, 'E_CONN_REFUSED');
-      this.state.transition('ERROR', appErr.message);
+      // ★#7：activateRouting 拒绝路径已自行进入 ERROR，这里不得再迁移（ERROR→ERROR 非法会产告警噪声）
+      if (this.state.state !== 'ERROR') this.state.transition('ERROR', appErr.message);
       this.reportError(appErr);
       throw appErr;
     }
@@ -277,16 +284,23 @@ export class DoipSession {
     return result;
   }
 
-  /** 断开连接（同步关闭 socket，异步部分由 DoipClient 的 close 事件收尾） */
+  /**
+   * 断开连接。★审计 P1-6：`handleClose`（client.close 同步触发）是**单一收尾出口**，
+   * 本方法不再自行做 CLOSED→DISCONNECTED 迁移——曾因两条收尾路径竞争，
+   * 在 DISCONNECTED 之后再 transition('CLOSED') 触发非法迁移告警。
+   */
   disconnect(reason = 'user-disconnect'): void {
     this.testerPresent.stop();
-    this.state.transition('CLOSING', reason);
+    // CLOSING 只在"连接还活着"时可见（ERROR/DISCONNECTED → CLOSING 不在迁移表内，会告警）
+    if (this.client.isConnected()) this.state.transition('CLOSING', reason);
     this.client.close(reason);
     this.txns.onSessionClosed(reason);
     this.tracker.reset('disconnected');
-    this.state.transition('CLOSED', reason);
-    this.state.transition('DISCONNECTED', reason);
     this.peer = null;
+    // client.close() 未触发 handleClose 时（从未建立过 socket）兜底归位
+    if (this.state.state !== 'DISCONNECTED') {
+      this.state.force('DISCONNECTED', reason);
+    }
     this.emitStatus();
   }
 
@@ -310,16 +324,25 @@ export class DoipSession {
       this.lastRoutingCode = res.code;
       this.lastRoutingCodeZh = res.codeNameZh;
       this.lastRttMs = res.latencyMs;
-      // 0x11（需确认）停在 ROUTING_ACTIVATING；其余一律视为已激活（成功与否由 code 表达）
-      if (res.code === 0x11) {
+      /**
+       * ★审计 P0-1：只有 0x10 是激活成功。
+       * 曾把 0x00–0x04 拒绝码也当成功转入 ROUTING_ACTIVE——真实网关拒绝时界面显示
+       * "已激活"，后续诊断全部 NACK/超时，排错方向被系统性误导（"假激活"）。
+       * 0x11（需确认）停在 ROUTING_ACTIVATING；其余一律 ERROR + 码表 hint（Q1：交用户决策）。
+       */
+      if (res.code === 0x10) {
+        this.state.transition('ROUTING_ACTIVE', `路由激活成功（0x10，${Math.round(res.latencyMs)}ms）`);
+      } else if (res.code === 0x11) {
         this.state.transition('ROUTING_ACTIVATING', '路由激活需确认（0x11），保持原态');
         this.reportError(new AppError('E_ROUTING_CONFIRM_REQUIRED'));
       } else {
-        this.state.transition('ROUTING_ACTIVE', `路由激活响应 ${formatCode(res.code)}`);
+        this.state.transition('ERROR', `路由激活被拒绝：${res.codeNameZh}`);
+        throw new AppError('E_ROUTING_DENIED', `路由激活被拒绝（${formatCode(res.code)}）：${res.codeNameZh}`,
+          res.hintZh === null ? {} : { hintZh: res.hintZh });
       }
     } catch (err) {
       const appErr = err instanceof AppError ? err : toAppError(err, 'E_ROUTING_TIMEOUT');
-      this.state.transition('ERROR', appErr.message);
+      if (this.state.state !== 'ERROR') this.state.transition('ERROR', appErr.message);
       throw appErr;
     }
     this.emitStatus();

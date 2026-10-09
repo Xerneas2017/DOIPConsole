@@ -36,7 +36,13 @@ export const ALLOWED_TRANSITIONS: Record<ConnectionState, readonly ConnectionSta
   CLOSING: ['CLOSED', 'ERROR'],
   CLOSED: ['DISCONNECTED'],
   // 用户 dismiss 或手动重连（非自动）
-  ERROR: ['DISCONNECTED', 'TCP_CONNECTING'],
+  /**
+   * ★`ROUTING_ACTIVATING` 这条边是 Phase 0 #1（拒绝码 → ERROR）补的：
+   * 路由激活被拒绝（0x00–0x04）时 socket 仍存活、状态进入 ERROR，
+   * 但"用户点「重激活」在同一 socket 重发 0x0005"必须仍可表达（Q1 允许的人工重试），
+   * 否则 reactivate 会被状态机拦成非法迁移告警，且激活成功后状态无法离开 ERROR（与真实链路分叉）。
+   */
+  ERROR: ['DISCONNECTED', 'TCP_CONNECTING', 'ROUTING_ACTIVATING'],
 };
 
 export type UdsSessionType = 'DEFAULT' | 'PROGRAMMING' | 'EXTENDED' | 'UNKNOWN';

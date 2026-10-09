@@ -45,7 +45,14 @@ const GID_LENGTH = 6;
  */
 const ROUTING_REQ_MIN_LENGTH = 7; // SA(2) + activationType(1) + reservedIso(4)
 const ROUTING_REQ_LENGTH = 11; // 上述 + reservedOem(4)
-const ROUTING_RES_LENGTH = 13;
+/**
+ * ★路由激活响应（0x0006）的长度：**9 或 13 都合法**（与 0x0005 请求的 7/11 互为镜像）。
+ * ISO 13400-2 payload 为 tester(2) + entity(2) + responseCode(1) + reservedIso(4) [+ reservedOem(4)]，
+ * **OEM 保留字段可选**。曾因硬校验 `< 13` 直接判非法，老网关（协议版本 0x01 一代）
+ * 回 9 字节时激活响应被丢弃 → "激活永远超时"（README 互操作性事故 #1 的反向孪生）。
+ */
+const ROUTING_RES_MIN_LENGTH = 9; // tester(2) + entity(2) + code(1) + reservedIso(4)
+const ROUTING_RES_LENGTH = 13; // 上述 + reservedOem(4)
 const ANNOUNCEMENT_LENGTH = 33;
 const ENTITY_STATUS_RES_LENGTH = 7;
 
@@ -119,13 +126,16 @@ function decodeRoutingActivationRequest(payload: Buffer): RoutingActivationReque
 }
 
 function decodeRoutingActivationResponse(payload: Buffer): RoutingActivationResponsePayload | null {
-  if (payload.length < ROUTING_RES_LENGTH) return null;
+  // ★9 或 13 字节均可（OEM 保留字段可选，见上方常量注释）
+  if (payload.length < ROUTING_RES_MIN_LENGTH) return null;
   return {
     testerLogicalAddress: payload.readUInt16BE(0),
     doipEntityLogicalAddress: payload.readUInt16BE(2),
     routingActivationResponseCode: payload.readUInt8(4),
     reservedIso: payload.readUInt32BE(5),
-    reservedOem: sliceCopy(payload, 9, ROUTING_RES_LENGTH),
+    // 未携带 OEM 字段时给空数组（与 0x0005 请求解码同规则，调用方无需二次判空）
+    reservedOem:
+      payload.length >= ROUTING_RES_LENGTH ? sliceCopy(payload, 9, ROUTING_RES_LENGTH) : new Uint8Array(0),
   };
 }
 

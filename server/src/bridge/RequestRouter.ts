@@ -591,6 +591,8 @@ export class RequestRouter {
           UdsEncoder.securityAccessBytes(subs.sendKey, UdsEncoder.tryParseRawHex(payload.customKeyHex) ?? undefined),
         ),
         tag: '0x27自定义密钥',
+        // ★#4：security.unlock 命令本身就是用户显式解锁动作，内部放行
+        confirmed: true,
       });
       send('uds.result', result);
       this.ack(send, id, result.ok, { txnId: result.txnId, state: result.state });

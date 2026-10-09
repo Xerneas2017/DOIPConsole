@@ -114,6 +114,13 @@ export class TransactionManager {
   private readonly pending = new Map<string, Transaction[]>();
   private readonly completed: Transaction[] = [];
   private readonly waiters = new Map<string, Deferred>();
+  /**
+   * ★审计 P1-5：`expectResponse=false` 的事务发出即终态、移出 pending，
+   * 但网关仍会对它回 0x8002/0x8003——此前匹配不到 pending 就告警，
+   * 周期 3E 每 tick 产一条 E_TXN_UNMATCHED_ACK，错误计数与状态栏被噪声淹没。
+   * 这里保留短 TTL 的"已发不等响应"记录，其 ACK/NACK 到达时静默吞掉。
+   */
+  private readonly fireAndForget = new Map<string, Array<{ sid: number; expiresAtMs: number }>>();
 
   private counter = 0;
   private seqCounter = 0;
@@ -223,6 +230,8 @@ export class TransactionManager {
     if (req.expectResponse === false) {
       this.transition(txn, 'COMPLETED', '已发送（按请求未等待响应）');
       this.finalize(txn, true, null);
+      // ★#8：登记进短 TTL 索引——网关稍后仍会回 0x8002，届时静默吞掉而不是告警
+      this.rememberFireAndForget(txn);
       return promise;
     }
 
@@ -237,6 +246,10 @@ export class TransactionManager {
     const key = keyOf(payload.sourceAddress, payload.targetAddress);
     const txn = this.resolvePending(payload.sourceAddress, payload.targetAddress, (t) => t.state === 'WAITING_ACK');
     if (txn === null) {
+      // ★#8：`expectResponse=false` 事务的 ACK 属预期迟到——静默吞掉，不产 E_TXN_UNMATCHED_ACK
+      if (this.consumeFireAndForgetAck(payload.sourceAddress, payload.targetAddress, payload.previousMessage[0] ?? null)) {
+        return;
+      }
       this.warn('E_TXN_UNMATCHED_ACK', null, `收到无法配对的 0x8002 ACK（${key}）`);
       return;
     }
@@ -365,6 +378,8 @@ export class TransactionManager {
       cancelled += 1;
     }
     this.pending.clear();
+    // ★#8：旧连接的迟到 ACK 不得配对到新连接
+    this.fireAndForget.clear();
     if (cancelled > 0) {
       this.log.info('连接断开，事务已取消', { reason, cancelled });
     }
@@ -548,6 +563,38 @@ export class TransactionManager {
 
   private pendingKeyFor(txn: Transaction): string {
     return keyOf(txn.ta, txn.sa);
+  }
+
+  /** ★#8：`expectResponse=false` 终态后登记，供其迟到 ACK 静默配对 */
+  private rememberFireAndForget(txn: Transaction): void {
+    const key = this.pendingKeyFor(txn);
+    const expiresAtMs = this.now() + getTiming('FIRE_AND_FORGET_ACK_TTL_MS');
+    const list = (this.fireAndForget.get(key) ?? []).filter((e) => e.expiresAtMs > this.now());
+    list.push({ sid: txn.sid, expiresAtMs });
+    this.fireAndForget.set(key, list);
+  }
+
+  /**
+   * ★#8：判断这条无法配对到 pending 的 ACK 是否属于近期"已发不等响应"事务。
+   * 命中即消费一条并返回 true（调用方静默返回）；`sidGuess` 取 ACK 回显首字节，
+   * 回显过短（<2 字节，部分网关不回显）时按同 key 任意一条匹配。
+   * 注意：只吞 0x8002；0x8003 NACK 仍照常告警——投递失败必须让用户看到。
+   */
+  private consumeFireAndForgetAck(payloadSa: number, payloadTa: number, sidGuess: number | null): boolean {
+    const key = keyOf(payloadSa, payloadTa);
+    const list = this.fireAndForget.get(key);
+    if (list === undefined) return false;
+    const alive = list.filter((e) => e.expiresAtMs > this.now());
+    const idx = sidGuess === null ? 0 : alive.findIndex((e) => e.sid === sidGuess);
+    if (idx < 0 || alive.length === 0) {
+      if (alive.length === 0) this.fireAndForget.delete(key);
+      else this.fireAndForget.set(key, alive);
+      return false;
+    }
+    alive.splice(idx, 1);
+    if (alive.length === 0) this.fireAndForget.delete(key);
+    else this.fireAndForget.set(key, alive);
+    return true;
   }
 
   private findPending(key: string, predicate: (t: Transaction) => boolean): Transaction | null {
