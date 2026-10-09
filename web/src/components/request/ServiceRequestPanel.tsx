@@ -50,8 +50,9 @@ interface Favorite {
 const DESTRUCTIVE_ZH: Record<string, string> = {
   '0x11': 'ECU 会复位，正在进行的诊断会话与其它 tester 连接会被打断',
   '0x14': 'ECU 内已存储的 DTC 与快照数据会被永久清除，不可恢复',
-  '0x2e': '会写入 ECU 的非易失存储，写错值可能导致 ECU 功能异常',
+  '0x2E': '会写入 ECU 的非易失存储，写错值可能导致 ECU 功能异常',
   '0x31': '会启动/停止 ECU 内部例程，可能影响执行机构动作',
+  '0x27': '发送密钥错误会计入 ECU 解锁尝试计数，连续失败可能触发延迟惩罚甚至临时封禁（NRC 0x35/0x36）',
 };
 
 function normalizeHexInput(text: string): string {
@@ -124,7 +125,13 @@ export function ServiceRequestPanel(): JSX.Element {
     return null;
   }, [previewHex]);
 
-  const isDestructive = svc?.destructive === true || (mode === 'raw' && isDestructiveHex(previewHex));
+  /**
+   * ★#4（交叉评审① + 评审裁定进本批）：危险判定不再限定 raw 模式——
+   * 两模式 doSend 发的是同一份 previewHex（最终上线字节），按字节判定即与后端
+   * describeDestructive 完全同构；库内置 0x27 表单（未标 destructive 的 SendKey 选项）
+   * 也先弹 B17，而不是静默被后端 E_UDS_CONFIRM_REQUIRED 拒发。
+   */
+  const isDestructive = isDestructiveRequest(svc, previewHex);
 
   const stopPeriodic = useCallback(() => {
     if (timerRef.current !== null) {
@@ -136,11 +143,14 @@ export function ServiceRequestPanel(): JSX.Element {
 
   useEffect(() => () => stopPeriodic(), [stopPeriodic]);
 
-  const doSend = useCallback((): void => {
+  const doSend = useCallback((confirmed = false): void => {
     sendCommand('uds.send', {
       addressing,
       rawHex: previewHex,
       expectResponse: true,
+      // ★#4：只有用户过了 B17 强确认对话框才置 confirmed:true——
+      // 与后端 UdsService 门禁同口径（危险请求缺它一律 E_UDS_CONFIRM_REQUIRED 拒绝）。
+      ...(confirmed ? { confirmed: true } : {}),
     });
   }, [addressing, previewHex]);
 
@@ -386,7 +396,7 @@ export function ServiceRequestPanel(): JSX.Element {
             variant="contained"
             onClick={() => {
               setConfirmOpen(false);
-              doSend();
+              doSend(true);
             }}
           >
             确认发送
@@ -478,8 +488,31 @@ function formatGrouped(hex: string): string {
   return out.join(' ');
 }
 
-function isDestructiveHex(hex: string): boolean {
-  const code = parseCodeValue(hex.slice(0, 2));
+/**
+ * ★#4 与后端 UdsService.describeDestructive **同口径**的危险判定（供单测直接打）：
+ * 0x11/0x14/0x2E/0x31 + 0x27 偶数子功能（发送密钥）。
+ * 口径不一致时前端会漏弹确认框 → 后端直接拒发（E_UDS_CONFIRM_REQUIRED）。
+ */
+export function isDestructiveHex(hex: string): boolean {
+  const clean = hex.replace(/\s+/g, '');
+  const code = parseCodeValue(clean.slice(0, 2));
   if (code === null) return false;
-  return [0x11, 0x14, 0x2e, 0x31].includes(code);
+  if ([0x11, 0x14, 0x2e, 0x31].includes(code)) return true;
+  if (code === 0x27) {
+    const sub = parseCodeValue(clean.slice(2, 4));
+    return sub !== null && sub % 2 === 0;
+  }
+  return false;
+}
+
+/**
+ * ★#4 组合口径（纯函数，供单测直接打）：库标记 destructive 或**最终字节危险**都算。
+ * 与模式无关——表单模式经 buildRequestHex 产出的也是同一份上线字节（交叉评审①的教训：
+ * 库内置 0x27 表单可能未标 destructive，必须靠字节判定兜住）。
+ */
+export function isDestructiveRequest(
+  svc: { destructive?: boolean } | null,
+  previewHex: string,
+): boolean {
+  return svc?.destructive === true || isDestructiveHex(previewHex);
 }

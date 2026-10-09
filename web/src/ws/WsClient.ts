@@ -35,6 +35,35 @@ export function defaultWsUrl(): string {
   return `${proto}//${window.location.host}/ws`;
 }
 
+/**
+ * ★裁定①（Q1 守门三件套之一）：断线原因必须**对用户显式可见**。
+ * 传输层自动重连保留，但"为什么断、现在在干什么"不能是黑盒。
+ * 纯函数（供单测直接打）：把 close 事件归一成一句人话。
+ */
+export interface WsDisconnectInfo {
+  reason: string;
+  code?: number;
+  at: number;
+}
+
+export function describeWsClose(input: {
+  closedByUser: boolean;
+  heartbeatTimeout: boolean;
+  code: number;
+  reason: string;
+}): string {
+  if (input.closedByUser) return '主动断开（用户操作，不会自动重连）';
+  if (input.heartbeatTimeout) {
+    return `心跳超时：连续 ${String(TIMING.WS_PONG_TIMEOUT_MS)} ms 未收到后端消息`;
+  }
+  const text = input.reason.trim();
+  if (input.code === 1006) return '连接异常断开（1006：后端进程可能已退出）';
+  if (input.code > 0) {
+    return `远端断开 code=${String(input.code)}${text !== '' ? `（${text}）` : ''}`;
+  }
+  return '连接断开（无 close code：网络中断或后端不可达）';
+}
+
 export class WsClient {
   private readonly options: WsClientOptions;
   private socket: WebSocket | null = null;
@@ -45,6 +74,9 @@ export class WsClient {
   private heartbeatTimer: number | null = null;
   private lastInboundAtMs = 0;
   private closedByUser = false;
+  /** ★裁定①：心跳超时由本端主动 close，需要在 onclose 里区分归因 */
+  private heartbeatTimeoutPending = false;
+  private disconnectInfo: WsDisconnectInfo | null = null;
   /** 由上层在每次「连接成功」前更新（重连补齐起点） */
   private lastSeqProvider: () => number = () => 0;
 
@@ -54,6 +86,11 @@ export class WsClient {
 
   get currentStatus(): WsClientStatus {
     return this.status;
+  }
+
+  /** ★裁定①：最近一次断线的归因（连接成功后仍保留，供 UI 展示"上次为何断"） */
+  get lastDisconnect(): WsDisconnectInfo | null {
+    return this.disconnectInfo;
   }
 
   /** 让客户端知道当前已收到的最大 seq（重连时用于 hello 的 lastSeq） */
@@ -69,8 +106,11 @@ export class WsClient {
     try {
       socket = new WebSocket(this.options.url);
     } catch (err) {
-      this.options.onError?.(`WebSocket 创建失败：${String(err)}`);
+      const message = `WebSocket 创建失败：${String(err)}`;
+      this.disconnectInfo = { reason: message, at: Date.now() };
+      this.options.onError?.(message);
       this.scheduleReconnect();
+      this.setStatus('reconnecting', `${message} · 自动重连第 ${String(this.reconnectAttempts)} 次尝试`);
       return;
     }
     this.socket = socket;
@@ -98,15 +138,27 @@ export class WsClient {
       this.options.onError?.('WebSocket 连接错误（后端未启动？）');
     };
 
-    socket.onclose = (): void => {
+    socket.onclose = (evt: CloseEvent): void => {
       this.socket = null;
       this.stopHeartbeat();
+      const reason = describeWsClose({
+        closedByUser: this.closedByUser,
+        heartbeatTimeout: this.heartbeatTimeoutPending,
+        code: evt.code,
+        reason: evt.reason,
+      });
+      this.heartbeatTimeoutPending = false;
+      this.disconnectInfo = { reason, code: evt.code, at: Date.now() };
       if (this.closedByUser) {
-        this.setStatus('closed');
+        this.setStatus('closed', reason);
         return;
       }
-      this.setStatus('reconnecting');
+      // ★裁定①：先排期再广播——detail 里带上第几次尝试，UI 能说清"正在自动重连"
       this.scheduleReconnect();
+      this.setStatus(
+        'reconnecting',
+        `${reason} · 自动重连第 ${String(this.reconnectAttempts)} 次尝试（不补发业务请求）`,
+      );
     };
   }
 
@@ -119,7 +171,7 @@ export class WsClient {
     this.stopHeartbeat();
     this.socket?.close();
     this.socket = null;
-    this.setStatus('closed');
+    this.setStatus('closed', describeWsClose({ closedByUser: true, heartbeatTimeout: false, code: 0, reason: '' }));
   }
 
   /** 发送指令，返回指令 id（供 cmd.ack 对账） */
@@ -195,6 +247,7 @@ export class WsClient {
       const idle = Date.now() - this.lastInboundAtMs;
       if (idle > TIMING.WS_PONG_TIMEOUT_MS) {
         this.options.onError?.(`超过 ${TIMING.WS_PONG_TIMEOUT_MS} ms 未收到后端消息，主动重连`);
+        this.heartbeatTimeoutPending = true;
         this.socket?.close();
         return;
       }

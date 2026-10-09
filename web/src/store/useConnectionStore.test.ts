@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useConnectionStore } from './useConnectionStore';
+import { useConnectionStore, WS_STATUS_LABEL } from './useConnectionStore';
 import type { SessionStatus, SimStatus } from '@doip/shared';
 
 /**
@@ -75,5 +75,32 @@ describe('D-03 — WS 断开后的陈旧状态', () => {
     useConnectionStore.setState({ scanning: true });
     useConnectionStore.getState().setEntities([{ address: '0x1000' }] as never);
     expect(useConnectionStore.getState().scanning).toBe(false);
+  });
+});
+
+/**
+ * ★裁定① 回归：断线归因（wsDetail）随状态入 store，且不被 markStale 抹掉；
+ * 自动重连保留，但"为什么断"必须对用户显式可见。
+ */
+describe('裁定① — 断线原因/状态可见', () => {
+  it('setWsStatus 带 detail → wsDetail 记录；连接成功后清空', () => {
+    useConnectionStore.getState().setWsStatus('reconnecting', '心跳超时：连续 45000 ms 未收到后端消息 · 自动重连第 1 次尝试');
+    expect(useConnectionStore.getState().wsDetail).toContain('心跳超时');
+    useConnectionStore.getState().setWsStatus('open');
+    expect(useConnectionStore.getState().wsDetail).toBeNull();
+  });
+
+  it('★markStale 不清 wsDetail —— 它就是"这些数据为什么变未知"的答案', () => {
+    useConnectionStore.getState().setWsStatus('reconnecting', '连接异常断开（1006：后端进程可能已退出）');
+    useConnectionStore.getState().markStale();
+    expect(useConnectionStore.getState().wsDetail).toContain('1006');
+    expect(useConnectionStore.getState().stale).toBe(true);
+  });
+
+  it('每个 WsStatus 都有中文标签（不允许把裸枚举丢给用户）', () => {
+    const labels = Object.values(WS_STATUS_LABEL);
+    expect(labels.every((l) => l.length > 0)).toBe(true);
+    expect(WS_STATUS_LABEL.reconnecting).toBe('自动重连中');
+    expect(WS_STATUS_LABEL.closed).toBe('已断开');
   });
 });

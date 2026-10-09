@@ -3,8 +3,14 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Stack,
@@ -28,7 +34,14 @@ import { sendCommand } from '../../ws/useWsConnection';
  * - 算法下拉：`ported` 在前、`placeholder` 排最后并打灰标「待替换」；`verified` 打绿勾。
  * - 试算：输入 Seed → 显示 Key，并与向量期望值**同屏对照**。
  * - `verified=false` 时橙色提示"解锁可能失败（NRC 0x35）"。
+ * - ★P0-FE#4：未通过向量校验（含占位）算法的解锁必须先过强确认对话框——
+ *   勾选知情确认才放行；后端同口径要求 `confirmed: true`（原始 hex 不得绕过）。
  */
+
+/** 纯门禁函数（供单测直接打）：非空算法且未通过向量校验 → 需要强确认 */
+export function requiresStrongConfirm(a: KeyAlgorithmDescriptor | null): boolean {
+  return a !== null && !a.verified;
+}
 
 export function SecurityAccessPanel(): JSX.Element {
   const algorithms = useLibraryStore((s) => s.algorithms);
@@ -49,6 +62,10 @@ export function SecurityAccessPanel(): JSX.Element {
   const [level, setLevel] = useState(1);
   const [algorithmId, setAlgorithmId] = useState('');
   const [seedHex, setSeedHex] = useState('A1 B2 C3 D4');
+
+  /** ★P0-FE#4：强确认对话框（未验证/占位算法的解锁门禁） */
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [ackChecked, setAckChecked] = useState(false);
 
   const list = useMemo(() => algorithmsForLevel(algorithms, level), [algorithms, level]);
   /**
@@ -79,10 +96,21 @@ export function SecurityAccessPanel(): JSX.Element {
     sendCommand('keyAlgo.trial', { algorithmId: selected.id, level, seedHex });
   }, [level, seedHex, selected]);
 
+  const sendUnlock = useCallback((): void => {
+    if (selected === null) return;
+    // 后端契约（P0#4）：危险操作必须携带 confirmed:true，原始 hex 路径同口径不得绕过。
+    sendCommand('security.unlock', { level, keyAlgorithmId: selected.id, confirmed: true });
+  }, [level, selected]);
+
   const onUnlock = useCallback((): void => {
     if (selected === null) return;
-    sendCommand('security.unlock', { level, keyAlgorithmId: selected.id });
-  }, [level, selected]);
+    if (requiresStrongConfirm(selected)) {
+      setAckChecked(false);
+      setConfirmOpen(true);
+      return;
+    }
+    sendUnlock();
+  }, [selected, sendUnlock]);
 
   return (
     <Box
@@ -295,6 +323,53 @@ export function SecurityAccessPanel(): JSX.Element {
           </Stack>
         </Box>
       ) : null}
+
+      {/**
+       * ★P0-FE#4 强确认对话框：只在选中算法**未通过向量校验**时出现。
+       * 说清风险口径（NRC 0x35 / 解锁尝试计数 / ECU 封禁），
+       * 必须勾选知情确认才放行危险按钮。
+       */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>危险操作确认 · 0x27 SecurityAccess 解锁</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            {`当前算法「${selected?.nameZh ?? '—'}」`}
+            {selected !== null && isPlaceholder(selected) ? '（占位实现，待替换）' : ''}
+            {'未经测试向量校验，解锁大概率失败（NRC 0x35 incorrectKey）。'}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            错误的 Key 会计入 ECU 的解锁尝试次数：连续失败可能触发延迟惩罚，次数耗尽后该安全等级会被
+            ECU 临时封禁（需重新上电或等待延时），影响后续诊断窗口。
+          </Typography>
+          <Typography variant="body2" color="warning.main" sx={{ mb: 1 }}>
+            建议先用下方「试算」对照向量验证算法，或改用已验证（绿勾）/后端推荐算法。
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox size="small" checked={ackChecked} onChange={(e) => setAckChecked(e.target.checked)} />
+            }
+            label={
+              <Typography variant="body2">
+                我已知悉上述风险：本次解锁由我人工发起，系统不会自动重试。
+              </Typography>
+            }
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>取消</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={!ackChecked}
+            onClick={() => {
+              setConfirmOpen(false);
+              sendUnlock();
+            }}
+          >
+            确认发起解锁
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

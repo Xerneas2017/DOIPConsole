@@ -20,8 +20,25 @@ import type { DiscoveredEntity, RecordingStatus, SessionStatus, SimStatus, WsErr
  */
 export type WsStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
+/**
+ * ★裁定①状态转中文：断线/重连不能只丢一个英文枚举给用户。
+ * 'open' → 不显示附加文案；其余状态配合 `wsDetail`（WsClient 归因）展示。
+ */
+export const WS_STATUS_LABEL: Record<WsStatus, string> = {
+  idle: '未连接',
+  connecting: '连接中',
+  open: '已连接',
+  reconnecting: '自动重连中',
+  closed: '已断开',
+};
+
 export interface ConnectionState2 {
   wsStatus: WsStatus;
+  /**
+   * ★裁定①：断线/重连的人话归因（来自 WsClient.describeWsClose + 尝试次数）。
+   * null = 无异常（idle/open）。markStale 不清它——它就是"为什么看不到状态"的答案。
+   */
+  wsDetail: string | null;
   serverVersion: string | null;
   status: SessionStatus | null;
   entities: DiscoveredEntity[];
@@ -35,7 +52,7 @@ export interface ConnectionState2 {
   /** 最后一次 UDS 发送结果（B 区与 D 区共用；M4 扩展示） */
   lastResult: { ok: boolean; hex: string; note: string } | null;
 
-  setWsStatus(wsStatus: WsStatus): void;
+  setWsStatus(wsStatus: WsStatus, detail?: string | null): void;
   setServerVersion(version: string): void;
   setStatus(status: SessionStatus): void;
   setEntities(entities: DiscoveredEntity[]): void;
@@ -51,6 +68,7 @@ export interface ConnectionState2 {
 
 export const useConnectionStore = create<ConnectionState2>((set, get) => ({
   wsStatus: 'idle',
+  wsDetail: null,
   serverVersion: null,
   status: null,
   entities: [],
@@ -61,7 +79,7 @@ export const useConnectionStore = create<ConnectionState2>((set, get) => ({
   errors: [],
   lastResult: null,
 
-  setWsStatus: (wsStatus) => set({ wsStatus }),
+  setWsStatus: (wsStatus, detail = null) => set({ wsStatus, wsDetail: detail }),
   setServerVersion: (serverVersion) => set({ serverVersion }),
   // ★后端重新推来真值 → 陈旧标记解除
   setStatus: (status) => set({ status, stale: false }),

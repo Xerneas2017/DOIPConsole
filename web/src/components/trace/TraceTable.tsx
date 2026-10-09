@@ -8,7 +8,7 @@ import { TraceRow } from './TraceRow';
 import { FilterBar } from './FilterBar';
 import { TraceToolbar } from './TraceToolbar';
 import { EmptyState } from '../common/EmptyState';
-import { mergeGapRows } from './gapMerge';
+import { buildDisplayRows } from './gapMerge';
 import type { MergedRow } from './gapMerge';
 import { decodeSummary, rawHexDisplay } from '../../decode/displayStrings';
 import { notify } from '../common/SnackHost';
@@ -46,10 +46,10 @@ export function TraceTable(): JSX.Element {
 
   const { rows, invalidExpr } = useFilteredRows(entries, filterExpr, hidePeriodic);
 
-  /* ★D-01：缺口合并（纯函数，见 gapMerge.ts —— 单测直接打它） */
+  /* ★D-01 / ★P0-FE#5：缺口对全量行推演（过滤行不再造假灰条），按可见 seq 裁剪渲染 */
   const merged: MergedRow[] = useMemo(
-    () => mergeGapRows(rows, gaps),
-    [rows, gaps],
+    () => buildDisplayRows(entries, rows, gaps),
+    [entries, rows, gaps],
   );
 
   const scrollRef = useRef<HTMLDivElement | null>(null);

@@ -183,7 +183,11 @@ export type ClientCommand =
   | { type: 'routing.reactivate'; id: string; payload: Record<string, never> }
   | { type: 'target.set'; id: string; payload: { ta: string } }
   | { type: 'uds.send'; id: string; payload: SendUdsRequest }
-  | { type: 'security.unlock'; id: string; payload: { level: number; keyAlgorithmId?: string; customKeyHex?: string } }
+  /**
+   * ★P0#4：`confirmed` 是危险操作（0x27 解锁等）的人工确认标记。
+   * 前端只在用户通过强确认对话框后置 true；后端对未验证算法/危险 SID 缺省视为 false 并拒绝。
+   */
+  | { type: 'security.unlock'; id: string; payload: { level: number; keyAlgorithmId?: string; customKeyHex?: string; confirmed?: boolean } }
   | { type: 'testerPresent'; id: string; payload: { enable: boolean; periodMs?: number; subFunction?: string } }
   | { type: 'sim.start'; id: string; payload: { entities?: SimEntityConfig[]; port?: number } }
   | { type: 'sim.stop'; id: string; payload: Record<string, never> }
