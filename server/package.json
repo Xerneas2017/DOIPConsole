@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "DoIP 协议栈后端：编解码 / 分帧 / 事务配对 / 仿真 ECU / WS 桥接",
+  "license": "Apache-2.0",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

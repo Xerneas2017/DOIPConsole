@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "DoIP 诊断控制台前端（M3/T08–T11：Vite + React 18 + MUI v6 + Tailwind，深色主题）",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

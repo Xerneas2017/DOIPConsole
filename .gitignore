@@ -31,6 +31,9 @@ coverage/
 # QA 验证过程产物（截图 / 桩后端等，量大且可再生）
 scripts/qa-shots/
 
+# 本地架构审阅/分析产物（不参与版本控制）
+code-analysis-output/
+
 # Agent 工作区（项目记忆等；保留在磁盘上，但不参与版本控制，避免噪声提交）
 .workbuddy/
 

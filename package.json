@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "DoIP 诊断控制台 — DoIP/UDS 诊断工具（npm workspaces: shared / server / web）",
+  "license": "Apache-2.0",
+  "author": "Xerneas2017",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Xerneas2017/DOIPConsole.git"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
