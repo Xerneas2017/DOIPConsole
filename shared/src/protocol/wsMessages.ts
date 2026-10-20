@@ -6,7 +6,14 @@
  */
 
 import { z } from 'zod';
-import type { DiscoveredEntity, SessionStatus, SimEntityConfig, SimStatus, FaultRule } from '../types/session';
+import type {
+  DiscoveredEntity,
+  SessionStatus,
+  SimEntityConfig,
+  SimStatus,
+  FaultRule,
+} from '../types/session';
+import type { EntityStatusResponsePayload } from '../types/doip';
 import type { TraceEntry, ExportRequest, RecordingStatus, RecordingConfigOverrides, LogFileStatus } from '../types/trace';
 import type {
   KeyAlgorithmDescriptor,
@@ -146,6 +153,16 @@ export type ServerEvent =
   | { type: 'status'; payload: SessionStatus }
   | { type: 'scan.result'; payload: { entities: DiscoveredEntity[]; partial: boolean } }
   | { type: 'sim.status'; payload: SimStatus }
+  /**
+   * ★协议完整度补齐：实体状态（0x4001 → 0x4002，UDP 通道）。
+   * tester 主动询问对端实体的节点类型 / 并发 socket 容量 / 当前连接数 / 最大数据长度。
+   */
+  | { type: 'entityStatus.result'; payload: EntityStatusResult }
+  /**
+   * ★协议完整度补齐：电源模式（0x4003 → 0x4004，UDP 通道）。
+   * powerMode：0x00=不适用 0x01=未准备 0x02=准备就绪 0x03=不支持
+   */
+  | { type: 'powerMode.result'; payload: { powerMode: number; powerModeNameZh: string; latencyMs: number; from: string } }
   | { type: 'library.snapshot'; payload: UdsLibrary }
   /** 库更新被拒（zod/语义校验失败），带可定位的 issues */
   | { type: 'library.rejected'; payload: { issues: ValidationIssue[] } }
@@ -166,6 +183,11 @@ export type ServerEvent =
     }
   | { type: 'keyAlgo.trial'; payload: KeyTrialResult }
   | { type: 'security.unlocked'; payload: UnlockResult }
+  /**
+   * ★协议完整度补齐：主动 Alive Check（TCP 0x0007 → 0x0008）结果。
+   * 用于验证路由激活后的 socket 存活状态与往返延迟。
+   */
+  | { type: 'aliveCheck.result'; payload: { sourceAddress: number; latencyMs: number } }
   | { type: 'error'; payload: WsError }
   | { type: 'cmd.ack'; payload: { id: string; ok: boolean; error?: WsError } }
   | { type: 'export.ready'; payload: { id: string; downloadUrl: string; filename: string; bytes: number } }
@@ -200,6 +222,22 @@ export type ClientCommand =
   | { type: 'keyAlgo.trial'; id: string; payload: { algorithmId: string; level: number; seedHex: string } }
   | { type: 'trace.resync'; id: string; payload: { fromSeq: number } }
   | { type: 'trace.clear'; id: string; payload: Record<string, never> }
+  /**
+   * ★协议完整度补齐：TCP 通道主动存活检查（0x0007 → 0x0008）。
+   * ISO 13400-2 中 Alive Check 既可由实体发起（tester 被动应答，已实现），
+   * 也可由 tester 主动询问实体（此处补充）——验证路由激活后 socket 是否存活。
+   */
+  | { type: 'aliveCheck.request'; id: string; payload: Record<string, never> }
+  /**
+   * ★协议完整度补齐：UDP 通道实体状态请求（0x4001 → 0x4002）。
+   * targetIp 缺省用当前连接目标；port 缺省 13400（或仿真端口）。
+   */
+  | { type: 'entityStatus.request'; id: string; payload: { targetIp?: string; port?: number; timeoutMs?: number } }
+  /**
+   * ★协议完整度补齐：UDP 通道电源模式请求（0x4003 → 0x4004）。
+   * 部分实体会按 0x4003 返回当前电源模式，用于判断 ECU 是否就绪。
+   */
+  | { type: 'powerMode.request'; id: string; payload: { targetIp?: string; port?: number; timeoutMs?: number } }
   /* ★变更 1：长挂机滚动落盘控制 */
   | { type: 'record.start'; id: string; payload: { sessionDir?: string; overrides?: RecordingConfigOverrides } }
   | { type: 'record.stop'; id: string; payload: Record<string, never> }
@@ -233,6 +271,32 @@ export const ClientCommandEnvelopeSchema = z.object({
   id: z.string().min(1),
   payload: z.unknown(),
 });
+
+/** ★0x4002 实体状态结果（tester 视角，含中文名与来源） */
+export interface EntityStatusResult {
+  nodeType: EntityStatusResponsePayload['nodeType'];
+  nodeTypeNameZh: string;
+  maxConcurrentSockets: number;
+  currentlyOpenSockets: number;
+  maxDataSize: number;
+  latencyMs: number;
+  /** 响应来源 'ip:port' */
+  from: string;
+}
+
+/** 0x4002 nodeType 码表（ISO 13400-2：0x00=DoIP 节点 0x01=DoIP 网关） */
+export const ENTITY_NODE_TYPE_NAMES: Record<number, string> = {
+  0x00: 'DoIP 节点',
+  0x01: 'DoIP 网关',
+};
+
+/** 0x4004 电源模式码表（ISO 13400-2） */
+export const POWER_MODE_NAMES: Record<number, string> = {
+  0x00: '不适用',
+  0x01: '未准备就绪',
+  0x02: '准备就绪',
+  0x03: '不支持',
+};
 
 export function parseClientCommand(input: unknown): ClientCommand | null {
   const parsed = ClientCommandEnvelopeSchema.safeParse(input);

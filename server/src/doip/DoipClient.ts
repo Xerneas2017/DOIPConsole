@@ -86,7 +86,11 @@ export class DoipClient {
   private aliveWaiter: Waiter<AliveCheckResult> | null = null;
   private closedReason: string | null = null;
 
-  readonly protocolVersion: number;
+  /**
+   * 协议版本（0x02/0x03）。★可变：Q8 —— `connect(cfg)` 携带的 protocolVersion
+   * 可在已构造的 client 上生效（头结构一致，切换无需重建连接）。
+   */
+  protocolVersion: number;
   /**
    * 激活类型。★可变：`connect(cfg)` 携带的 activationType 必须覆盖构造默认值——
    * 曾因只写进 `options` 而 `sendRoutingActivation()` 读的是本字段，配置永不生效（审计 P1-1）。
@@ -160,6 +164,18 @@ export class DoipClient {
     } finally {
       this.connecting = false;
     }
+  }
+
+  /**
+   * ★Q8：运行时切换协议版本（0x02/0x03）。
+   * 只影响后续发出的帧头（头结构一致，0x03 仅 inverse 与 0x9001 语义不同），
+   * 已建立的 TCP 连接无需重建。
+   */
+  setProtocolVersion(pv: number): void {
+    if (pv !== 0x02 && pv !== 0x03) {
+      throw new AppError('E_CONN_INVALID_CONFIG', `协议版本仅支持 0x02/0x03，收到 0x${pv.toString(16)}`);
+    }
+    this.protocolVersion = pv;
   }
 
   /** 手动重激活（★Q1 唯一允许的"重试"）：同一 socket 重发 0x0005 */

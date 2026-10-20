@@ -93,6 +93,19 @@ function routeServerEvent(event: ServerEvent): void {
     case 'sim.status':
       conn.setSim(event.payload as never);
       break;
+    case 'aliveCheck.result': {
+      const p = event.payload as { sourceAddress: number; latencyMs: number };
+      conn.setAliveCheck(p);
+      break;
+    }
+    case 'entityStatus.result': {
+      conn.setEntityStatus(event.payload as never);
+      break;
+    }
+    case 'powerMode.result': {
+      conn.setPowerMode(event.payload as never);
+      break;
+    }
     case 'trace.logfile':
       conn.setRecording(event.payload as never);
       break;

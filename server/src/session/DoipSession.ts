@@ -12,6 +12,7 @@ import {
   formatLogicalAddress,
   nowEpochMs,
   nowMonoMs,
+  parseCode,
   parseHex,
   parseLogicalAddress,
 } from '@doip/shared';
@@ -195,6 +196,17 @@ export class DoipSession {
     if (this.client.isConnected() || this.state.state === 'TCP_CONNECTING' || this.state.state === 'ROUTING_ACTIVATING') {
       throw new AppError('E_CONN_ALREADY_CONNECTED', '已有连接或连接进行中，请先断开再连接');
     }
+    // ★Q8 落地：ConnectConfig.protocolVersion 在连接时生效（曾只存在于 schema，从未传入 client）
+    if (cfg.protocolVersion !== undefined && cfg.protocolVersion.trim() !== '') {
+      const pv = parseCode(cfg.protocolVersion);
+      if (pv !== 0x02 && pv !== 0x03) {
+        throw new AppError('E_CONN_INVALID_CONFIG', `协议版本仅支持 0x02/0x03，收到 ${formatCode(pv)}`);
+      }
+      this.client.setProtocolVersion(pv);
+    }
+    if (cfg.activationType !== undefined && cfg.activationType.trim() !== '') {
+      this.client.activationType = parseCode(cfg.activationType);
+    }
     // ★D-05：相对时间基准 = 本次连接建立的时刻（重连重新起算）
     this.sessionStartedAtMs = nowEpochMs();
     this.state.transition('TCP_CONNECTING', `连接 ${cfg.host}:${cfg.port}`);
@@ -234,6 +246,33 @@ export class DoipSession {
     this.emitStatus();
     await this.activateRouting();
     return this.buildStatus();
+  }
+
+  /**
+   * ★协议完整度补齐：TCP 主动 Alive Check（0x0007 → 0x0008）。
+   *
+   * ISO 13400-2 中 Alive Check 是双向的：实体发 0x0007 问 tester（P0 已实现被动应答），
+   * tester 也可以主动发 0x0007 验证实体与路由是否存活 —— 此前缺失。
+   * 状态机走 ALIVE_CHECKING 环路；★Q1：超时不自动重试。
+   */
+  async aliveCheck(): Promise<{ sourceAddress: number; latencyMs: number }> {
+    if (!this.client.isConnected()) {
+      throw new AppError('E_CONN_NOT_CONNECTED', '尚未建立连接，无法发起 Alive Check');
+    }
+    this.state.transition('ALIVE_CHECKING', '主动存活检查（0x0007）');
+    this.emitStatus();
+    try {
+      const result = await this.client.sendAliveCheck();
+      this.lastRttMs = result.latencyMs;
+      this.state.transition('ROUTING_ACTIVE', `存活检查通过（${Math.round(result.latencyMs)}ms）`);
+      this.emitStatus();
+      return result;
+    } catch (err) {
+      const appErr = err instanceof AppError ? err : toAppError(err, 'E_CONN_TIMEOUT');
+      if (this.state.state !== 'ERROR') this.state.transition('ERROR', appErr.message);
+      this.reportError(appErr);
+      throw appErr;
+    }
   }
 
   /** ★Q4：切换目标地址不重建连接（DoIP 路由激活是针对 socket 而非 TA 的） */

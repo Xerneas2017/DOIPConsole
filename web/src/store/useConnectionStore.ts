@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { DiscoveredEntity, RecordingStatus, SessionStatus, SimStatus, WsError } from '@doip/shared';
+import type {
+  DiscoveredEntity,
+  EntityStatusResult,
+  RecordingStatus,
+  SessionStatus,
+  SimStatus,
+  WsError,
+} from '@doip/shared';
 
 /**
  * 连接 / 会话 / 仿真 / 录盘 状态 store（T09）。
@@ -51,6 +58,14 @@ export interface ConnectionState2 {
   errors: Array<WsError & { at: number }>;
   /** 最后一次 UDS 发送结果（B 区与 D 区共用；M4 扩展示） */
   lastResult: { ok: boolean; hex: string; note: string } | null;
+  /** ★协议完整度补齐：最近一次 Alive Check（0x0007→0x0008）结果 */
+  aliveCheck: { sourceAddress: number; latencyMs: number; at: number } | null;
+  /** ★协议完整度补齐：最近一次实体状态（0x4001→0x4002）结果 */
+  entityStatus: (EntityStatusResult & { at: number }) | null;
+  /** ★协议完整度补齐：最近一次电源模式（0x4003→0x4004）结果 */
+  powerMode: { powerMode: number; powerModeNameZh: string; latencyMs: number; from: string; at: number } | null;
+  /** 传输层诊断请求进行中标记（防重复点击） */
+  diagBusy: boolean;
 
   setWsStatus(wsStatus: WsStatus, detail?: string | null): void;
   setServerVersion(version: string): void;
@@ -61,6 +76,10 @@ export interface ConnectionState2 {
   setRecording(recording: RecordingStatus): void;
   pushError(error: WsError): void;
   setLastResult(result: { ok: boolean; hex: string; note: string } | null): void;
+  setAliveCheck(result: { sourceAddress: number; latencyMs: number }): void;
+  setEntityStatus(result: EntityStatusResult): void;
+  setPowerMode(result: { powerMode: number; powerModeNameZh: string; latencyMs: number; from: string }): void;
+  setDiagBusy(busy: boolean): void;
   clearErrors(): void;
   /** ★D-03：WS 断开 → 清空全部由后端推送的状态并标记"未知" */
   markStale(): void;
@@ -78,6 +97,10 @@ export const useConnectionStore = create<ConnectionState2>((set, get) => ({
   stale: false,
   errors: [],
   lastResult: null,
+  aliveCheck: null,
+  entityStatus: null,
+  powerMode: null,
+  diagBusy: false,
 
   setWsStatus: (wsStatus, detail = null) => set({ wsStatus, wsDetail: detail }),
   setServerVersion: (serverVersion) => set({ serverVersion }),
@@ -89,9 +112,17 @@ export const useConnectionStore = create<ConnectionState2>((set, get) => ({
   setRecording: (recording) => set({ recording, stale: false }),
   pushError: (error) => {
     const errors = get().errors.concat({ ...error, at: Date.now() });
-    set({ errors: errors.slice(-100) });
+    // ★传输层诊断失败时不会有 result 事件回包，这里统一解锁，避免按钮永久禁用
+    set({ errors: errors.slice(-100), diagBusy: false });
   },
   setLastResult: (lastResult) => set({ lastResult }),
+  setAliveCheck: (result) =>
+    set({ aliveCheck: { ...result, at: Date.now() }, diagBusy: false, stale: false }),
+  setEntityStatus: (result) =>
+    set({ entityStatus: { ...result, at: Date.now() }, diagBusy: false, stale: false }),
+  setPowerMode: (result) =>
+    set({ powerMode: { ...result, at: Date.now() }, diagBusy: false, stale: false }),
+  setDiagBusy: (diagBusy) => set({ diagBusy }),
   clearErrors: () => set({ errors: [] }),
 
   /**
@@ -106,6 +137,10 @@ export const useConnectionStore = create<ConnectionState2>((set, get) => ({
       sim: null,
       recording: null,
       lastResult: null,
+      aliveCheck: null,
+      entityStatus: null,
+      powerMode: null,
+      diagBusy: false,
       stale: true,
     }),
 }));

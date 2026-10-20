@@ -14,8 +14,9 @@ import {
   formatHexCompact,
   formatLogicalAddress,
   nowEpochMs,
+  nowMonoMs,
 } from '@doip/shared';
-import type { DiscoveredEntity, DoipFrame } from '@doip/shared';
+import type { DiscoveredEntity, DoipFrame, EntityStatusResponsePayload } from '@doip/shared';
 import { DoipHeaderCodec } from './DoipHeaderCodec';
 import { DoipPayloadCodec } from './DoipPayloadCodec';
 import { AppError } from '../errors/AppError';
@@ -283,6 +284,126 @@ export class DoipUdpDiscovery {
     clearTimeout(pending.timer);
     this.pending = null;
     pending.resolve([...this.collected.values()]);
+  }
+
+  /**
+   * ★协议完整度补齐：实体状态请求（0x4001 → 0x4002，UDP 单播）。
+   *
+   * ISO 13400-2 中实体状态与电源模式同走 UDP 管理通道。此前 0x4001 只在
+   * **仿真侧**有应答（DoipEntityUdp.replyEntityStatus），tester 侧从未发过 ——
+   * 界面上无从查看对端的节点类型 / 并发容量 / 当前连接数 / 最大数据长度。
+   */
+  async requestEntityStatus(
+    targetIp: string,
+    timeoutMs?: number,
+    port?: number,
+  ): Promise<EntityStatusResponsePayload & { from: string; latencyMs: number } | null> {
+    const result = await this.udpManagementRoundtrip(
+      PayloadType.ENTITY_STATUS_REQ,
+      PayloadType.ENTITY_STATUS_RES,
+      targetIp,
+      timeoutMs,
+      port,
+      (payload): EntityStatusResponsePayload | null => {
+        if (payload.length < 7) return null;
+        return {
+          nodeType: payload.readUInt8(0),
+          maxConcurrentSockets: payload.readUInt8(1),
+          currentlyOpenSockets: payload.readUInt8(2),
+          maxDataSize: payload.readUInt32BE(3),
+        };
+      },
+    );
+    if (result === null) return null;
+    return { ...result.value, from: result.from, latencyMs: result.latencyMs };
+  }
+
+  /**
+   * ★协议完整度补齐：电源模式请求（0x4003 → 0x4004，UDP 单播）。
+   * 返回 powerMode 原始字节（0x00~0x03），码表解释在 shared 层。
+   */
+  async requestPowerMode(
+    targetIp: string,
+    timeoutMs?: number,
+    port?: number,
+  ): Promise<{ powerMode: number; from: string; latencyMs: number } | null> {
+    const result = await this.udpManagementRoundtrip(
+      PayloadType.POWER_MODE_REQ,
+      PayloadType.POWER_MODE_RES,
+      targetIp,
+      timeoutMs,
+      port,
+      (payload): { powerMode: number } | null => {
+        if (payload.length < 1) return null;
+        return { powerMode: payload.readUInt8(0) };
+      },
+    );
+    if (result === null) return null;
+    return { powerMode: result.value.powerMode, from: result.from, latencyMs: result.latencyMs };
+  }
+
+  /**
+   * UDP 管理通道一问一答的通用骨架：发 requestType，等 responseType 或超时。
+   * 每次新建独立 socket（源端口随机），用后即关，不复用发现通道 ——
+   * 避免与进行中的车辆发现扫描互相干扰。
+   */
+  private async udpManagementRoundtrip<T>(
+    requestType: number,
+    responseType: number,
+    targetIp: string,
+    timeoutMs: number | undefined,
+    port: number | undefined,
+    parse: (payload: Buffer) => T | null,
+  ): Promise<{ value: T; from: string; latencyMs: number } | null> {
+    const targetPort = port ?? this.port;
+    const waitMs = timeoutMs ?? getTiming('UDP_UNICAST_RESPONSE_TIMEOUT_MS');
+    const payload = Buffer.alloc(0);
+    const frame = DoipHeaderCodec.buildFrame(this.protocolVersion, requestType, payload);
+    this.options.onFrame?.(this.toFrame(frame), 'TX', `${targetIp}:${targetPort}`);
+
+    return new Promise((resolve) => {
+      const socket = dgram.createSocket({ type: 'udp4' });
+      const startedAtMs = nowMonoMs();
+      let settled = false;
+      const finish = (value: { value: T; from: string; latencyMs: number } | null): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try {
+          socket.close();
+        } catch {
+          /* 已关闭则忽略 */
+        }
+        resolve(value);
+      };
+      const timer = setTimeout(() => {
+        finish(null);
+      }, waitMs);
+      socket.on('message', (msg: Buffer, rinfo: RemoteInfo) => {
+        if (settled) return;
+        const header = DoipHeaderCodec.tryDecodeHeader(msg, 0);
+        if (header === null || header.payloadType !== responseType) return;
+        if (msg.length < 8 + header.payloadLength) return;
+        this.options.onFrame?.(this.toFrame(msg), 'RX', `${rinfo.address}:${rinfo.port}`);
+        const parsed = parse(msg.subarray(8, 8 + header.payloadLength));
+        if (parsed === null) return;
+        finish({
+          value: parsed,
+          from: `${rinfo.address}:${rinfo.port}`,
+          latencyMs: nowMonoMs() - startedAtMs,
+        });
+      });
+      socket.on('error', () => {
+        finish(null);
+      });
+      socket.bind(0, () => {
+        try {
+          socket.send(frame, 0, frame.length, targetPort, targetIp);
+        } catch {
+          finish(null);
+        }
+      });
+    });
   }
 }
 

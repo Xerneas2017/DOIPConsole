@@ -59,6 +59,11 @@ export class ConnectionManager {
     return session.reactivate();
   }
 
+  /** ★协议完整度补齐：TCP 主动 Alive Check（0x0007 → 0x0008） */
+  async aliveCheck(sessionId?: string): Promise<{ sourceAddress: number; latencyMs: number }> {
+    return this.mustGet(sessionId).aliveCheck();
+  }
+
   async disconnect(reason = 'user-disconnect', sessionId?: string): Promise<void> {
     const id = this.resolveId(sessionId);
     const session = this.sessions.get(id);

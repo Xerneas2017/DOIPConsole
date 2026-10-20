@@ -29,6 +29,7 @@ import type {
   WsError,
   RecordingConfigOverrides,
 } from '@doip/shared';
+import { ENTITY_NODE_TYPE_NAMES, POWER_MODE_NAMES } from '@doip/shared';
 import { AppError, errorToWsError, toAppError } from '../errors/AppError';
 import { getLogger } from '../logging/logger';
 import { getFileLogSink } from '../logging/fileLog';
@@ -173,6 +174,15 @@ export class RequestRouter {
           this.deps.resync.handleHello(cmd.payload.fromSeq);
           this.ack(send, cmd.id, true);
           break;
+        case 'aliveCheck.request':
+          await this.onAliveCheck(send, cmd.id);
+          break;
+        case 'entityStatus.request':
+          await this.onEntityStatus(cmd.payload, send, cmd.id);
+          break;
+        case 'powerMode.request':
+          await this.onPowerMode(cmd.payload, send, cmd.id);
+          break;
         case 'trace.clear':
           this.deps.store.clear();
           this.ack(send, cmd.id, true);
@@ -276,6 +286,101 @@ export class RequestRouter {
       discovery.stopPassiveListen();
       discovery.cancelPending();
     }
+  }
+
+  /**
+   * ★协议完整度补齐：TCP 主动 Alive Check（0x0007 → 0x0008）。
+   *
+   * 状态机映射：ROUTING_ACTIVE → ALIVE_CHECKING → ROUTING_ACTIVE（成功）/ ERROR（失败）。
+   * ★Q1：超时不自动重试，只回错误与处置建议。
+   */
+  private async onAliveCheck(send: SendFn, id: string): Promise<void> {
+    const session = this.deps.connections.get();
+    if (session === undefined || !session.isConnected()) {
+      throw new AppError('E_CONN_NOT_CONNECTED', '尚未建立连接，无法发起 Alive Check');
+    }
+    try {
+      const result = await session.aliveCheck();
+      send('aliveCheck.result', {
+        sourceAddress: result.sourceAddress,
+        latencyMs: Math.round(result.latencyMs),
+      });
+      this.ack(send, id, true);
+    } catch (err) {
+      const appErr = err instanceof AppError ? err : toAppError(err, 'E_CONN_TIMEOUT');
+      this.deps.bus.publishError(appErr.toWsError());
+      throw appErr;
+    }
+  }
+
+  /** ★协议完整度补齐：UDP 实体状态（0x4001 → 0x4002）。 */
+  private async onEntityStatus(
+    payload: { targetIp?: string; port?: number; timeoutMs?: number },
+    send: SendFn,
+    id: string,
+  ): Promise<void> {
+    const target = this.resolveUdpTarget(payload);
+    const discovery = new DoipUdpDiscovery({ port: target.port });
+    try {
+      const status = await discovery.requestEntityStatus(target.ip, payload.timeoutMs, target.port);
+      if (status === null) {
+        throw new AppError('E_UDP_TIMEOUT', `实体状态请求超时：${target.ip}:${target.port} 无响应`);
+      }
+      send('entityStatus.result', {
+        nodeType: status.nodeType,
+        nodeTypeNameZh: ENTITY_NODE_TYPE_NAMES[status.nodeType] ?? `未知(0x${status.nodeType.toString(16)})`,
+        maxConcurrentSockets: status.maxConcurrentSockets,
+        currentlyOpenSockets: status.currentlyOpenSockets,
+        maxDataSize: status.maxDataSize,
+        latencyMs: Math.round(status.latencyMs),
+        from: status.from,
+      });
+      this.ack(send, id, true);
+    } finally {
+      discovery.stopPassiveListen();
+      discovery.cancelPending();
+    }
+  }
+
+  /** ★协议完整度补齐：UDP 电源模式（0x4003 → 0x4004）。 */
+  private async onPowerMode(
+    payload: { targetIp?: string; port?: number; timeoutMs?: number },
+    send: SendFn,
+    id: string,
+  ): Promise<void> {
+    const target = this.resolveUdpTarget(payload);
+    const discovery = new DoipUdpDiscovery({ port: target.port });
+    try {
+      const result = await discovery.requestPowerMode(target.ip, payload.timeoutMs, target.port);
+      if (result === null) {
+        throw new AppError('E_UDP_TIMEOUT', `电源模式请求超时：${target.ip}:${target.port} 无响应`);
+      }
+      send('powerMode.result', {
+        powerMode: result.powerMode,
+        powerModeNameZh: POWER_MODE_NAMES[result.powerMode] ?? `未知(0x${result.powerMode.toString(16)})`,
+        latencyMs: Math.round(result.latencyMs),
+        from: result.from,
+      });
+      this.ack(send, id, true);
+    } finally {
+      discovery.stopPassiveListen();
+      discovery.cancelPending();
+    }
+  }
+
+  /**
+   * UDP 管理请求的目标解析：未显式给定时，取当前连接的 peer（连着谁就问谁）；
+   * 没有活动连接则回落到 127.0.0.1 + 仿真/标准端口 —— 与「车辆发现」的默认口径一致。
+   */
+  private resolveUdpTarget(payload: { targetIp?: string; port?: number }): { ip: string; port: number } {
+    const status = this.deps.getStatus();
+    if (payload.targetIp !== undefined && payload.targetIp.trim() !== '') {
+      return { ip: payload.targetIp.trim(), port: payload.port ?? PORTS.SIM_DEFAULT_TCP_UDP };
+    }
+    if (status?.peer !== null && status?.peer !== undefined) {
+      return { ip: status.peer.host, port: payload.port ?? status.peer.port };
+    }
+    return { ip: BIND_HOST, port: payload.port ?? PORTS.SIM_DEFAULT_TCP_UDP };
   }
 
   private async onConnect(

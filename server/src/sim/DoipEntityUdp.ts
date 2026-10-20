@@ -172,6 +172,16 @@ export class DoipEntityUdp {
       case PayloadType.ENTITY_STATUS_REQ:
         this.replyEntityStatus(rinfo);
         return;
+      /**
+       * ★协议完整度补齐：电源模式请求（0x4003 → 0x4004）。
+       *
+       * 与 0x4001 同属 UDP 管理通道。之前仿真侧没有这个分支，tester 发 0x4003
+       * 会落到 default 被丢弃 —— 互操作性缺口（第三方库 request_power_mode() 必超时）。
+       * 仿真恒回 0x02（准备就绪）；需要模拟未就绪场景时用故障注入扩展。
+       */
+      case PayloadType.POWER_MODE_REQ:
+        this.replyPowerMode(rinfo);
+        return;
       default:
         /**
          * ★"实体 → tester"方向的报文会**回环到我们自己的 socket**
@@ -231,6 +241,27 @@ export class DoipEntityUdp {
 
   private replyAll(rinfo: RemoteInfo): void {
     for (const cfg of this.entities) this.sendAnnouncement(cfg, rinfo.address, rinfo.port);
+  }
+
+  /** 回 0x4004 电源模式响应（1 字节）。仿真恒回 0x02 = 准备就绪。 */
+  private replyPowerMode(rinfo: RemoteInfo): void {
+    const socket = this.socket;
+    if (socket === null) return;
+    const payload = DoipPayloadCodec.encode({
+      kind: 'powerModeResponse',
+      payloadType: PayloadType.POWER_MODE_RES,
+      value: { powerMode: 0x02 },
+    });
+    const frame = DoipHeaderCodec.buildFrame(this.protocolVersion, PayloadType.POWER_MODE_RES, payload);
+    try {
+      socket.send(frame, 0, frame.length, rinfo.port, rinfo.address);
+      this.log.info('已回电源模式响应 0x4004', { peer: `${rinfo.address}:${rinfo.port}` });
+    } catch (err) {
+      this.log.warn('电源模式响应发送失败', {
+        peer: `${rinfo.address}:${rinfo.port}`,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private replyMatching(rinfo: RemoteInfo, predicate: (cfg: SimEntityConfig) => boolean): void {
