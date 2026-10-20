@@ -5,8 +5,6 @@
 | Language | 简体中文 |
 | Project Name | `doip_diagnostic_console` |
 | 文档版本 | **v1.1**（含变更 1「长挂机滚动落盘提前到 P0」与变更 2「Seed/Key 改为 `ported` 移植算法主路径」） |
-| 撰写人 | 项目组 |
-| 上游输入 | `docs/PRD.md` v1.0（906 行）+ 项目组对 Q1–Q13 的裁决 |
 | 交付形态 | 单机本地运行：浏览器 UI（React）+ 本机 Node 协议栈后端（raw TCP/UDP socket） |
 | 运行环境 | Node.js ≥ 20 LTS（实测环境 v22.22.2）、npm workspaces、TypeScript 5.x |
 

@@ -14,7 +14,7 @@ import { buildUdsRequestBytes } from '../txn/TransactionManager';
 import { UdsEncoder } from './UdsEncoder';
 
 /**
- * ★Phase 0 #4：破坏性 SID 白名单（与 前端 前端 Dialog 同口径）。
+ * ★Phase 0 #4：破坏性 SID 白名单（与 前端 Dialog 同口径）。
  * 0x11 ECU复位 / 0x14 清DTC / 0x2E 写DID / 0x31 例程控制；
  * 0x27 不在这里整服务拦，只拦**偶数子功能（发送密钥）**——取种子（奇数）无破坏性。
  */

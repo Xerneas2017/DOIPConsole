@@ -33,11 +33,9 @@ ISO 13400-2 里 OEM 保留字段是**可选**的，两种长度都必须接受�
 ----
 1. 起后端：`npm start`
 2. 在界面点一次「连接」（仿真模式会自动拉起仿真 ECU），或先点「启动」
-3. 跑本脚本：
-       python3 \
-         scripts/interop-python-doipclient.py [仿真端口，默认 13401]
-
-依赖：pip install doipclient
+3. 跑本脚本（需先安装依赖）：
+       pip install doipclient
+       python3 scripts/interop-python-doipclient.py [仿真端口，默认 13401]
 """
 
 from __future__ import annotations

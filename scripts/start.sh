@@ -19,14 +19,8 @@ for arg in "$@"; do
   esac
 done
 
-# 优先使用受管 Node（存在则注入 PATH）
-NODE_BIN=""
-if [ -x "$NODE_BIN/node" ]; then
-  export PATH="$NODE_BIN:$PATH"
-fi
-
 if ! command -v node >/dev/null 2>&1; then
-  echo "✗ 找不到 node，请先安装 Node.js 22" >&2
+  echo "✗ 找不到 node，请先安装 Node.js 20 或更高版本" >&2
   exit 1
 fi
 echo "Node: $(node -v)"
