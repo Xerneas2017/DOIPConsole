@@ -3,10 +3,12 @@ import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material';
 import { sendCommand } from '../../ws/useWsConnection';
 import { useUiStore } from '../../store/useUiStore';
 import { HexInput } from '../common/HexInput';
+import { useT } from '../../i18n';
 import { ConnectionPanelSections } from './ConnectionPanelSections';
 import { EntityDiscoveryList } from './EntityDiscoveryList';
 import { RoutingActivationCard } from './RoutingActivationCard';
 import { SessionSecurityCard } from './SessionSecurityCard';
+import { TransportDiagCard } from './TransportDiagCard';
 import { SimEcuControl } from './FaultInjectDialog';
 
 /**
@@ -20,6 +22,7 @@ import { SimEcuControl } from './FaultInjectDialog';
  *   仿真控制必须先被看到。
  */
 export function ConnectionPanel(): JSX.Element {
+  const t = useT();
   return (
     <Paper
       square
@@ -33,31 +36,37 @@ export function ConnectionPanel(): JSX.Element {
       }}
     >
       <Stack spacing={1} sx={{ p: 1 }}>
-        <ConnectionPanelSections title="仿真 ECU 控制" plain>
+        <ConnectionPanelSections title={t('仿真 ECU 控制')} plain>
           <SimEcuControl />
         </ConnectionPanelSections>
 
         <Divider />
 
-        <ConnectionPanelSections title="已发现实体">
+        <ConnectionPanelSections title={t('已发现实体')}>
           <EntityDiscoveryList />
         </ConnectionPanelSections>
 
         <Divider />
 
-        <ConnectionPanelSections title="SA / TA">
+        <ConnectionPanelSections title={t('SA / TA')}>
           <TargetAddressField />
         </ConnectionPanelSections>
 
         <Divider />
 
-        <ConnectionPanelSections title="路由激活" plain>
+        <ConnectionPanelSections title={t('路由激活')} plain>
           <RoutingActivationCard />
         </ConnectionPanelSections>
 
         <Divider />
 
-        <ConnectionPanelSections title="会话与解锁" plain>
+        <ConnectionPanelSections title={t('传输层诊断')} plain>
+          <TransportDiagCard />
+        </ConnectionPanelSections>
+
+        <Divider />
+
+        <ConnectionPanelSections title={t('会话与解锁')} plain>
           <SessionSecurityCard />
         </ConnectionPanelSections>
       </Stack>
@@ -71,12 +80,13 @@ function TargetAddressField(): JSX.Element {
   const ta = useUiStore((s) => s.ta);
   const setTarget = useUiStore((s) => s.setTarget);
   const [draft, setDraft] = useState(ta);
+  const t = useT();
 
   return (
     <Box>
-      <HexInput label="SA（ tester 逻辑地址）" value={sa} onChange={(v) => setTarget({ sa: v })} expectedBytes={2} />
+      <HexInput label={t('SA（ tester 逻辑地址）')} value={sa} onChange={(v) => setTarget({ sa: v })} expectedBytes={2} />
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: 0.5 }}>
-        <HexInput label="TA（目标逻辑地址）" value={draft} onChange={setDraft} expectedBytes={2} />
+        <HexInput label={t('TA（目标逻辑地址）')} value={draft} onChange={setDraft} expectedBytes={2} />
         <Button
           size="small"
           variant="outlined"
@@ -86,11 +96,11 @@ function TargetAddressField(): JSX.Element {
             sendCommand('target.set', { ta: draft });
           }}
         >
-          应用
+          {t('应用')}
         </Button>
       </Box>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        TA 切换走 target.set，不重建连接（Q4）
+        {t('TA 切换走 target.set，不重建连接（Q4）')}
       </Typography>
     </Box>
   );

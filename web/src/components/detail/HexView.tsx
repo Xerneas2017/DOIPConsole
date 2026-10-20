@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { tryParseHex } from '@doip/shared';
+import { useT } from '../../i18n';
 
 /**
  * Hex 视图（T11）：与解码树**双向高亮**。
@@ -19,6 +20,7 @@ export interface HexViewProps {
 export function HexView({ hex, highlight, onPickByte, bytesPerRow = 16 }: HexViewProps): JSX.Element {
   const bytes = useMemo(() => tryParseHex(hex) ?? new Uint8Array(0), [hex]);
   const [hover, setHover] = useState<number | null>(null);
+  const t = useT();
 
   const rows: Uint8Array[] = [];
   for (let i = 0; i < bytes.length; i += bytesPerRow) {
@@ -41,7 +43,13 @@ export function HexView({ hex, highlight, onPickByte, bytesPerRow = 16 }: HexVie
                   highlight !== null && offset >= highlight[0] && offset < highlight[1];
                 const isHover = hover === offset;
                 return (
-                  <Tooltip key={offset} title={`偏移 ${offset}（0x${offset.toString(16).toUpperCase()}）`}>
+                  <Tooltip
+                    key={offset}
+                    title={t('偏移 {offset}（0x{hex}）', {
+                      offset,
+                      hex: offset.toString(16).toUpperCase(),
+                    })}
+                  >
                     <Box
                       component="span"
                       onClick={() => onPickByte?.(offset)}
@@ -69,7 +77,7 @@ export function HexView({ hex, highlight, onPickByte, bytesPerRow = 16 }: HexVie
       })}
       {bytes.length === 0 ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          无数据
+          {t('无数据')}
         </Typography>
       ) : null}
     </Box>

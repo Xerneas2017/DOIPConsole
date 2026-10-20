@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Alert, Box, Button } from '@mui/material';
+import { t } from '../../i18n';
 
 /**
  * 局部错误边界（T11）：某一区崩溃时不带崩整个界面。
@@ -40,11 +41,11 @@ export class ErrorBoundary extends Component<Props, State> {
           severity="error"
           action={
             <Button color="inherit" size="small" onClick={this.handleReset}>
-              重试
+              {t('重试')}
             </Button>
           }
         >
-          {this.props.zone} 渲染失败：{error.message}
+          {t('渲染失败：{message}', { message: `${this.props.zone} / ${error.message}` })}
         </Alert>
       </Box>
     );

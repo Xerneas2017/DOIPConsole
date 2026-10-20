@@ -9,6 +9,8 @@ import { useTraceStore } from '../../store/useTraceStore';
 import { useConnectionStore } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
 import { notify } from '../common/SnackHost';
+import { useT } from '../../i18n';
+import type { RecordingStatus } from '@doip/shared';
 
 /**
  * C 区工具栏（T10 + T15/T17）：暂停/继续、自动跟随、清除、录盘开关、导出对话框。
@@ -22,12 +24,13 @@ export function TraceToolbar(): JSX.Element {
   const clear = useTraceStore((s) => s.clear);
   const recording = useConnectionStore((s) => s.recording);
   const setExportOpen = useUiStore((s) => s.setExportOpen);
+  const t = useT();
 
   const recordingOn = recording?.state === 'recording';
 
   return (
     <Stack direction="row" spacing={0.75} alignItems="center">
-      <Tooltip title={paused ? '继续摄入（Space）' : '暂停摄入（Space）'}>
+      <Tooltip title={paused ? t('继续摄入（Space）') : t('暂停摄入（Space）')}>
         <Button
           size="small"
           variant={paused ? 'contained' : 'outlined'}
@@ -35,11 +38,11 @@ export function TraceToolbar(): JSX.Element {
           onClick={() => setPaused(!paused)}
           sx={{ fontSize: 11, py: 0 }}
         >
-          {paused ? '继续' : '暂停'}
+          {paused ? t('继续') : t('暂停')}
         </Button>
       </Tooltip>
 
-      <Tooltip title="自动滚动到最新行（上滚会临时脱离）">
+      <Tooltip title={t('自动滚动到最新行（上滚会临时脱离）')}>
         <Button
           size="small"
           variant={follow ? 'contained' : 'outlined'}
@@ -47,11 +50,11 @@ export function TraceToolbar(): JSX.Element {
           onClick={() => setFollow(!follow)}
           sx={{ fontSize: 11, py: 0 }}
         >
-          跟随
+          {t('跟随')}
         </Button>
       </Tooltip>
 
-      <Tooltip title="清空前端缓冲（后端 trace.clear 同步执行）">
+      <Tooltip title={t('清空前端缓冲（后端 trace.clear 同步执行）')}>
         <Button
           size="small"
           color="inherit"
@@ -62,7 +65,7 @@ export function TraceToolbar(): JSX.Element {
           }}
           sx={{ fontSize: 11, py: 0 }}
         >
-          清除
+          {t('清除')}
         </Button>
       </Tooltip>
 
@@ -72,13 +75,17 @@ export function TraceToolbar(): JSX.Element {
       <Tooltip
         title={
           recordingOn
-            ? `点击停止录制\n会话目录：${recording?.sessionDir ?? '-'}\n当前分片：${recording?.currentFile ?? '-'}\n分片数：${recording?.files.length ?? 0}`
-            : '点击开始录制（后端 RollingFileSink，WS 背压不影响落盘完整性）'
+            ? t('点击停止录制\n会话目录：{dir}\n当前分片：{file}\n分片数：{files}', {
+                dir: recording?.sessionDir ?? '-',
+                file: recording?.currentFile ?? '-',
+                files: recording?.files.length ?? 0,
+              })
+            : t('点击开始录制（后端 RollingFileSink，WS 背压不影响落盘完整性）')
         }
       >
         <Chip
           size="small"
-          label={recordingLabel(recording)}
+          label={recordingLabel(recording, t)}
           color={recording?.state === 'error' ? 'warning' : recordingOn ? 'error' : 'default'}
           variant={recordingOn ? 'filled' : 'outlined'}
           onClick={() => sendCommand(recordingOn ? 'record.stop' : 'record.start', {})}
@@ -86,29 +93,29 @@ export function TraceToolbar(): JSX.Element {
         />
       </Tooltip>
 
-      <Tooltip title={recording?.sessionDir ?? '尚无落盘目录'}>
+      <Tooltip title={recording?.sessionDir ?? t('尚无落盘目录')}>
         <Button
           size="small"
           color="inherit"
           startIcon={<FolderOpenIcon fontSize="small" />}
           onClick={() => {
             if (recording?.sessionDir === null || recording?.sessionDir === undefined) {
-              notify('尚无落盘目录（先开始录制）', 'warn');
+              notify(t('尚无落盘目录（先开始录制）'), 'warn');
               return;
             }
             sendCommand('record.openDir', { dir: recording.sessionDir });
           }}
           sx={{ fontSize: 11, py: 0 }}
         >
-          打开目录
+          {t('打开目录')}
         </Button>
       </Tooltip>
 
       <Divider orientation="vertical" flexItem />
 
-      <Tooltip title="导出 CSV / JSON / JSONL / HEX（可按过滤或 seq 区间）">
+      <Tooltip title={t('导出 CSV / JSON / JSONL / HEX（可按过滤或 seq 区间）')}>
         <Button size="small" variant="outlined" onClick={() => setExportOpen(true)} sx={{ fontSize: 11, py: 0 }}>
-          导出…
+          {t('导出…')}
         </Button>
       </Tooltip>
 
@@ -116,12 +123,12 @@ export function TraceToolbar(): JSX.Element {
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
         {(recording?.droppedCount ?? 0) > 0 ? (
           <Box component="span" sx={{ fontSize: 11, color: 'error.main' }} className="mono">
-            落盘丢弃 {recording?.droppedCount}
+            {t('落盘丢弃 {count}', { count: recording?.droppedCount ?? 0 })}
           </Box>
         ) : null}
         {paused && dropped > 0 ? (
           <Box component="span" sx={{ fontSize: 11, color: 'warning.main' }} className="mono">
-            暂停期间丢弃 {dropped} 条
+            {t('暂停期间丢弃 {count} 条', { count: dropped })}
           </Box>
         ) : null}
       </Box>
@@ -130,17 +137,28 @@ export function TraceToolbar(): JSX.Element {
 }
 
 /** ★T17：录盘状态一行说清 —— 状态 / 条数 / 体积 / 分片数（/ 当前分片名） */
-function recordingLabel(rec: ReturnType<typeof useConnectionStore.getState>['recording']): string {
-  if (rec === null) return '○ 未录制（未知）';
+function recordingLabel(rec: RecordingStatus | null, t: ReturnType<typeof useT>): string {
+  if (rec === null) return t('○ 未录制（未知）');
   const mb = rec.bytesWritten / (1024 * 1024);
   switch (rec.state) {
     case 'recording':
-      return `● 录制中 ${rec.entriesWritten} 条 / ${mb.toFixed(1)} MB / ${rec.files.length} 片`;
+      return t('● 录制中 {entries} 条 / {mb} MB / {files} 片', {
+        entries: rec.entriesWritten,
+        mb: mb.toFixed(1),
+        files: rec.files.length,
+      });
     case 'stopped':
-      return `■ 已停止 ${rec.entriesWritten} 条 / ${mb.toFixed(1)} MB / ${rec.files.length} 片`;
+      return t('■ 已停止 {entries} 条 / {mb} MB / {files} 片', {
+        entries: rec.entriesWritten,
+        mb: mb.toFixed(1),
+        files: rec.files.length,
+      });
     case 'error':
-      return `⚠ 录制异常 ${rec.errorCode ?? ''}（已写 ${rec.entriesWritten} 条）`;
+      return t('⚠ 录制异常 {code}（已写 {entries} 条）', {
+        code: rec.errorCode ?? '',
+        entries: rec.entriesWritten,
+      });
     default:
-      return '○ 未录制';
+      return t('○ 未录制');
   }
 }

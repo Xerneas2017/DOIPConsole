@@ -27,6 +27,7 @@ import { formatHex, tryParseHex } from '@doip/shared';
 import type { KeyAlgorithmDescriptor } from '@doip/shared';
 import { algorithmsForLevel, selectAlgorithm, useLibraryStore } from '../../store/useLibraryStore';
 import { sendCommand } from '../../ws/useWsConnection';
+import { useT } from '../../i18n';
 
 /**
  * 0x27 解锁面板 + 算法试算（T14）。
@@ -66,6 +67,7 @@ export function SecurityAccessPanel(): JSX.Element {
   /** ★P0-FE#4：强确认对话框（未验证/占位算法的解锁门禁） */
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [ackChecked, setAckChecked] = useState(false);
+  const t = useT();
 
   const list = useMemo(() => algorithmsForLevel(algorithms, level), [algorithms, level]);
   /**
@@ -130,7 +132,7 @@ export function SecurityAccessPanel(): JSX.Element {
         <TextField
           select
           size="small"
-          label="安全等级"
+          label={t('安全等级')}
           value={String(level)}
           onChange={(e) => setLevel(Number(e.target.value))}
           sx={{ minWidth: 120 }}
@@ -145,7 +147,7 @@ export function SecurityAccessPanel(): JSX.Element {
         <TextField
           select
           size="small"
-          label="Key 算法"
+          label={t('Key 算法')}
           value={selected?.id ?? ''}
           onChange={(e) => {
             setAlgorithmId(e.target.value);
@@ -158,7 +160,7 @@ export function SecurityAccessPanel(): JSX.Element {
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <span>{a.nameZh}</span>
                 {isPlaceholder(a) ? (
-                  <Chip size="small" label="待替换" sx={{ height: 18, fontSize: 10 }} />
+                  <Chip size="small" label={t('待替换')} sx={{ height: 18, fontSize: 10 }} />
                 ) : a.provider !== 'ported' ? (
                   <Chip size="small" variant="outlined" label={a.provider} sx={{ height: 18, fontSize: 10 }} />
                 ) : null}
@@ -169,7 +171,7 @@ export function SecurityAccessPanel(): JSX.Element {
         </TextField>
 
         {picked ? (
-          <Tooltip title="已手动指定，点此交还给后端推荐（仿真/已验证算法）">
+          <Tooltip title={t('已手动指定，点此交还给后端推荐（仿真/已验证算法）')}>
             <IconButton
               size="small"
               onClick={() => {
@@ -188,7 +190,7 @@ export function SecurityAccessPanel(): JSX.Element {
           onClick={onUnlock}
           disabled={selected === null}
         >
-          一键解锁
+          {t('一键解锁')}
         </Button>
       </Stack>
 
@@ -205,8 +207,12 @@ export function SecurityAccessPanel(): JSX.Element {
             sx={{ py: 0.25, '& .MuiAlert-message': { py: 0.25 } }}
           >
             {unlock.ok
-              ? `解锁成功（Level ${unlock.level}，Seed ${unlock.seedHex ?? '—'} → Key ${unlock.keyHex ?? '—'}）`
-              : `解锁失败：${unlock.note ?? unlock.errorCode ?? '未知原因'}`}
+              ? t('解锁成功（Level {level}，Seed {seed} → Key {key}）', {
+                  level: unlock.level,
+                  seed: unlock.seedHex ?? '—',
+                  key: unlock.keyHex ?? '—',
+                })
+              : t('解锁失败：{reason}', { reason: unlock.note ?? unlock.errorCode ?? t('未知原因') })}
           </Alert>
         </Box>
       ) : null}
@@ -214,13 +220,19 @@ export function SecurityAccessPanel(): JSX.Element {
       {selected !== null ? (
         <Box sx={{ px: 1 }}>
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-            <Chip size="small" label={`适用等级 ${selected.appliesToLevels.join('/') || '不限'}`} />
-            <Chip size="small" label={`Seed ${selected.seedLengthBytes ?? '不限'} 字节`} />
-            <Chip size="small" label={`Key ${selected.keyLengthBytes ?? '与 Seed 等长'}`} />
+            <Chip size="small" label={t('适用等级 {levels}', { levels: selected.appliesToLevels.join('/') || t('不限') })} />
+            <Chip size="small" label={t('Seed {bytes} 字节', { bytes: selected.seedLengthBytes ?? t('不限') })} />
+            <Chip size="small" label={t('Key {bytes}', { bytes: selected.keyLengthBytes ?? t('与 Seed 等长') })} />
             <Chip
               size="small"
               color={isPlaceholder(selected) ? 'default' : 'success'}
-              label={isPlaceholder(selected) ? '占位实现' : selected.provider === 'ported' ? '移植算法' : `库定义 ${selected.provider}`}
+              label={
+                isPlaceholder(selected)
+                  ? t('占位实现')
+                  : selected.provider === 'ported'
+                    ? t('移植算法')
+                    : t('库定义 {provider}', { provider: selected.provider })
+              }
             />
           </Stack>
           {selected.notes !== undefined ? (
@@ -230,7 +242,7 @@ export function SecurityAccessPanel(): JSX.Element {
           ) : null}
           {isPlaceholder(selected) && !selected.verified ? (
             <Alert severity="warning" sx={{ mt: 0.5, py: 0 }}>
-              该算法未通过测试向量校验，解锁可能失败（NRC 0x35）
+              {t('该算法未通过测试向量校验，解锁可能失败（NRC 0x35）')}
             </Alert>
           ) : null}
         </Box>
@@ -245,7 +257,7 @@ export function SecurityAccessPanel(): JSX.Element {
           label="Seed（hex）"
           value={seedHex}
           error={seedInvalid}
-          helperText={seedInvalid ? '非法 hex' : ' '}
+          helperText={seedInvalid ? t('非法 hex') : ' '}
           onChange={(e) => setSeedHex(e.target.value)}
           inputProps={{ className: 'mono', spellCheck: false }}
           sx={{ minWidth: 220 }}
@@ -257,17 +269,17 @@ export function SecurityAccessPanel(): JSX.Element {
           onClick={onTrial}
           disabled={selected === null || seedInvalid}
         >
-          试算
+          {t('试算')}
         </Button>
       </Stack>
 
       {trial !== null ? (
         <Box sx={{ px: 1 }}>
           <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
-            <Field label="算出 Key" value={trial.keyHex ?? '—'} mono />
+            <Field label={t('算出 Key')} value={trial.keyHex ?? '—'} mono />
             <Field
-              label="向量期望值"
-              value={trial.expectedKeyHex ?? '（无对照向量）'}
+              label={t('向量期望值')}
+              value={trial.expectedKeyHex ?? t('（无对照向量）')}
               mono
               muted={trial.expectedKeyHex === null}
             />
@@ -276,14 +288,14 @@ export function SecurityAccessPanel(): JSX.Element {
                 <>
                   <CheckCircleIcon fontSize="small" color="success" />
                   <Typography variant="caption" color="success.main">
-                    与期望值一致
+                    {t('与期望值一致')}
                   </Typography>
                 </>
               ) : (
                 <>
                   <CancelIcon fontSize="small" color="error" />
                   <Typography variant="caption" color="error">
-                    与期望值不一致
+                    {t('与期望值不一致')}
                   </Typography>
                 </>
               )}
@@ -307,7 +319,7 @@ export function SecurityAccessPanel(): JSX.Element {
       {vectors.length > 0 ? (
         <Box sx={{ px: 1, overflow: 'auto', minHeight: 0 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            测试向量（{vectors.length} 条）
+            {t('测试向量（{count} 条）', { count: vectors.length })}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 0.25 }}>
             {vectors.slice(0, 8).map((v) => (
@@ -330,19 +342,18 @@ export function SecurityAccessPanel(): JSX.Element {
        * 必须勾选知情确认才放行危险按钮。
        */}
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>危险操作确认 · 0x27 SecurityAccess 解锁</DialogTitle>
+        <DialogTitle>{t('危险操作确认 · 0x27 SecurityAccess 解锁')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            {`当前算法「${selected?.nameZh ?? '—'}」`}
-            {selected !== null && isPlaceholder(selected) ? '（占位实现，待替换）' : ''}
-            {'未经测试向量校验，解锁大概率失败（NRC 0x35 incorrectKey）。'}
+            {t('当前算法「{name}」', { name: selected?.nameZh ?? '—' })}
+            {selected !== null && isPlaceholder(selected) ? t('（占位实现，待替换）') : ''}
+            {t('未经测试向量校验，解锁大概率失败（NRC 0x35 incorrectKey）。')}
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            错误的 Key 会计入 ECU 的解锁尝试次数：连续失败可能触发延迟惩罚，次数耗尽后该安全等级会被
-            ECU 临时封禁（需重新上电或等待延时），影响后续诊断窗口。
+            {t('错误的 Key 会计入 ECU 的解锁尝试次数：连续失败可能触发延迟惩罚，次数耗尽后该安全等级会被 ECU 临时封禁（需重新上电或等待延时），影响后续诊断窗口。')}
           </Typography>
           <Typography variant="body2" color="warning.main" sx={{ mb: 1 }}>
-            建议先用下方「试算」对照向量验证算法，或改用已验证（绿勾）/后端推荐算法。
+            {t('建议先用下方「试算」对照向量验证算法，或改用已验证（绿勾）/后端推荐算法。')}
           </Typography>
           <FormControlLabel
             control={
@@ -350,13 +361,13 @@ export function SecurityAccessPanel(): JSX.Element {
             }
             label={
               <Typography variant="body2">
-                我已知悉上述风险：本次解锁由我人工发起，系统不会自动重试。
+                {t('我已知悉上述风险：本次解锁由我人工发起，系统不会自动重试。')}
               </Typography>
             }
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>取消</Button>
+          <Button onClick={() => setConfirmOpen(false)}>{t('取消')}</Button>
           <Button
             color="error"
             variant="contained"
@@ -366,7 +377,7 @@ export function SecurityAccessPanel(): JSX.Element {
               sendUnlock();
             }}
           >
-            确认发起解锁
+            {t('确认发起解锁')}
           </Button>
         </DialogActions>
       </Dialog>

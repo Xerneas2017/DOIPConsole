@@ -18,6 +18,8 @@ import { TIMING } from '@doip/shared';
 import { useTraceStore } from '../../store/useTraceStore';
 import { sendCommand } from '../../ws/useWsConnection';
 import { notify } from '../common/SnackHost';
+import { useT } from '../../i18n';
+import type { TKey } from '../../i18n';
 
 /**
  * T15 — 导出对话框。
@@ -49,6 +51,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
   const [toSeq, setToSeq] = useState('');
   const [hidePeriodic, setHidePeriodic] = useState(false);
   const [busy, setBusy] = useState(false);
+  const t = useT();
 
   const filterExpr = useTraceStore((s) => s.filterExpr);
   const firstSeq = useTraceStore((s) => s.firstSeq);
@@ -62,7 +65,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
       const from = Number(trimmedFrom);
       const to = Number(trimmedTo);
       if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) {
-        notify('seq 区间非法（需要整数且 from ≤ to）', 'warn');
+        notify(t('seq 区间非法（需要整数且 from ≤ to）'), 'warn');
         return;
       }
     }
@@ -78,18 +81,20 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
     });
     // export.ready 到达后由 useWsConnection 触发下载；这里只做兜底解锁
     window.setTimeout(() => setBusy(false), TIMING.UI_EXPORT_UNLOCK_FALLBACK_MS);
-    notify(`已请求导出 ${format.toUpperCase()}（${scopeLabel(scope)}）`, 'info');
+    notify(t('已请求导出 {format}（{scope}）', { format: format.toUpperCase(), scope: t(scopeKey(scope)) }), 'info');
     onClose();
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontSize: 14, py: 1 }}>导出 Trace（{entryCount} 条在缓冲）</DialogTitle>
+      <DialogTitle sx={{ fontSize: 14, py: 1 }}>
+        {t('导出 Trace（{count} 条在缓冲）', { count: entryCount })}
+      </DialogTitle>
       <DialogContent sx={{ px: 1.5 }}>
         <Stack spacing={1.25} sx={{ pt: 0.5 }}>
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-              格式
+              {t('格式')}
             </Typography>
             <ToggleButtonGroup
               exclusive
@@ -106,13 +111,13 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
               ))}
             </ToggleButtonGroup>
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>
-              {FORMATS.find((f) => f.id === format)?.hint}
+              {t((FORMATS.find((f) => f.id === format)?.hint ?? '') as TKey)}
             </Typography>
           </Box>
 
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-              范围
+              {t('范围')}
             </Typography>
             <ToggleButtonGroup
               exclusive
@@ -123,25 +128,25 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
               }}
             >
               <ToggleButton value="all" sx={{ fontSize: 12, py: 0.25, px: 1.25 }}>
-                全部
+                {t('全部')}
               </ToggleButton>
               <ToggleButton value="filtered" sx={{ fontSize: 12, py: 0.25, px: 1.25 }}>
-                当前过滤
+                {t('当前过滤')}
               </ToggleButton>
               <ToggleButton value="selected" sx={{ fontSize: 12, py: 0.25, px: 1.25 }}>
-                seq 区间
+                {t('seq 区间')}
               </ToggleButton>
             </ToggleButtonGroup>
             {scope === 'filtered' ? (
               <Typography variant="caption" className="mono" sx={{ display: 'block', mt: 0.25, color: 'text.disabled' }}>
-                表达式：{filterExpr.trim() === '' ? '（过滤栏为空 = 全部）' : filterExpr}
+                {t('表达式：{expr}', { expr: filterExpr.trim() === '' ? t('（过滤栏为空 = 全部）') : filterExpr })}
               </Typography>
             ) : null}
             {scope === 'selected' ? (
               <Stack direction="row" spacing={1} sx={{ mt: 0.75 }} alignItems="center">
                 <TextField
                   size="small"
-                  label="起始 seq"
+                  label={t('起始 seq')}
                   placeholder={firstSeq === null ? '1' : String(firstSeq)}
                   value={fromSeq}
                   onChange={(e) => setFromSeq(e.target.value)}
@@ -153,7 +158,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
                 </Typography>
                 <TextField
                   size="small"
-                  label="结束 seq"
+                  label={t('结束 seq')}
                   placeholder={lastSeq === null ? '' : String(lastSeq)}
                   value={toSeq}
                   onChange={(e) => setToSeq(e.target.value)}
@@ -173,17 +178,17 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
               />
             }
             sx={{ fontSize: 12 }}
-            title="导出结果中剔除周期 TesterPresent（0x3E 0x80），减少噪音"
-            label={<Typography variant="body2">隐藏周期 TesterPresent（0x3E 0x80）</Typography>}
+            title={t('导出结果中剔除周期 TesterPresent（0x3E 0x80），减少噪音')}
+            label={<Typography variant="body2">{t('隐藏周期 TesterPresent（0x3E 0x80）')}</Typography>}
           />
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 1.5, pb: 1 }}>
         <Button size="small" onClick={onClose} sx={{ fontSize: 12 }}>
-          取消
+          {t('取消')}
         </Button>
         <Button size="small" variant="contained" disabled={busy} onClick={submit} sx={{ fontSize: 12 }}>
-          {busy ? '导出中…' : '导出并下载'}
+          {busy ? t('导出中…') : t('导出并下载')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -192,7 +197,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): JSX.Element 
 
 type ExportDialogFormat = 'csv' | 'json' | 'jsonl' | 'hexdump';
 
-function scopeLabel(scope: 'all' | 'filtered' | 'selected'): string {
+/** 范围 → 字典 key（原 scopeLabel 改为纯映射，翻译由调用方用 t 完成） */
+function scopeKey(scope: 'all' | 'filtered' | 'selected'): TKey {
   switch (scope) {
     case 'filtered':
       return '当前过滤';

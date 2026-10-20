@@ -7,8 +7,9 @@ import { buildDecodeRows, DecodeTree } from './DecodeTree';
 import { HexView } from './HexView';
 import { ErrorExplainCard } from './ErrorExplainCard';
 import { decodeSummary } from '../../decode/displayStrings';
+import { useT } from '../../i18n';
 
-const TXN_ROLE_ZH: Record<string, string> = {
+const TXN_ROLE_KEYS: Record<string, '请求' | '响应' | '网关确认' | '网关拒绝' | '主动上报'> = {
   request: '请求',
   response: '响应',
   ack: '网关确认',
@@ -30,6 +31,8 @@ function TxnSummary({
 }): JSX.Element {
   const latency = entry.latencyMs;
   const gw = entry.gatewayForwardLatencyMs;
+  const t = useT();
+  const roleKey = entry.txnRole === null ? undefined : TXN_ROLE_KEYS[entry.txnRole];
 
   return (
     <Stack
@@ -38,15 +41,17 @@ function TxnSummary({
       alignItems="center"
       sx={{ px: 1, py: 0.25, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}
     >
-      <Field label="事务" value={entry.transactionId ?? '—'} />
-      {entry.txnRole === null ? null : <Field label="角色" value={TXN_ROLE_ZH[entry.txnRole] ?? entry.txnRole} />}
+      <Field label={t('事务')} value={entry.transactionId ?? '—'} />
+      {entry.txnRole === null ? null : (
+        <Field label={t('角色')} value={roleKey === undefined ? entry.txnRole : t(roleKey)} />
+      )}
       <Field
-        label="耗时(ms)"
+        label={t('耗时(ms)')}
         value={latency === null ? '—' : latency.toFixed(1)}
         color={latency === null ? 'text.secondary' : 'success.main'}
       />
       <Field
-        label="网关转发(ms)"
+        label={t('网关转发(ms)')}
         value={gw === null ? '—' : gw.toFixed(1)}
         color={gw === null ? 'text.secondary' : 'text.primary'}
       />
@@ -63,13 +68,13 @@ function TxnSummary({
             fontSize: 11,
             cursor: 'pointer',
           }}
-          title="跳转到配对行"
+          title={t('跳转到配对行')}
         >
-          配对行 → seq {entry.linkedSeq}
+          {t('配对行 → seq {seq}', { seq: entry.linkedSeq })}
         </button>
       )}
       {entry.timeout ? (
-        <Chip size="small" color="error" label="超时" sx={{ height: 16, fontSize: 10 }} />
+        <Chip size="small" color="error" label={t('超时')} sx={{ height: 16, fontSize: 10 }} />
       ) : null}
     </Stack>
   );
@@ -103,6 +108,7 @@ export function DetailPanel(): JSX.Element {
   const [tab, setTab] = useState(0);
   const [highlight, setHighlight] = useState<[number, number] | null>(null);
   const [pickedOffset, setPickedOffset] = useState<number | null>(null);
+  const t = useT();
 
   const entry = useMemo(
     () => (selectedSeq === null ? null : entries.find((e) => e.seq === selectedSeq) ?? null),
@@ -129,7 +135,10 @@ export function DetailPanel(): JSX.Element {
   if (entry === null) {
     return (
       <Paper square elevation={0} sx={{ height: '100%', bgcolor: 'background.paper' }}>
-        <EmptyState title="未选择报文" hint="在 C 区点击任意一行，这里显示三层解码、原始 hex 与错误解释" />
+        <EmptyState
+          title={t('未选择报文')}
+          hint={t('在 C 区点击任意一行，这里显示三层解码、原始 hex 与错误解释')}
+        />
       </Paper>
     );
   }
@@ -158,9 +167,9 @@ export function DetailPanel(): JSX.Element {
         onChange={(_e, next: number) => setTab(next)}
         sx={{ minHeight: 28, borderBottom: '1px solid', borderColor: 'divider' }}
       >
-        <Tab label="解码树" sx={{ minHeight: 28, fontSize: 12, py: 0 }} />
+        <Tab label={t('解码树')} sx={{ minHeight: 28, fontSize: 12, py: 0 }} />
         <Tab label="Hex" sx={{ minHeight: 28, fontSize: 12, py: 0 }} />
-        <Tab label="错误解释" sx={{ minHeight: 28, fontSize: 12, py: 0 }} />
+        <Tab label={t('错误解释')} sx={{ minHeight: 28, fontSize: 12, py: 0 }} />
       </Tabs>
 
       <Box sx={{ flex: 1, overflow: 'auto', p: 0.75, minHeight: 0 }}>
@@ -172,11 +181,16 @@ export function DetailPanel(): JSX.Element {
             <Divider />
             {pickedRow === null ? (
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                点击任意字节可反向定位到字段
+                {t('点击任意字节可反向定位到字段')}
               </Typography>
             ) : (
               <Typography variant="caption" className="mono">
-                偏移 {pickedOffset} → {pickedRow.field}（{pickedRow.valueHex}）{pickedRow.nameZh ?? ''}
+                {t('偏移 {offset} → {field}（{hex}）{name}', {
+                  offset: pickedOffset ?? 0,
+                  field: pickedRow.field,
+                  hex: pickedRow.valueHex,
+                  name: pickedRow.nameZh ?? '',
+                })}
               </Typography>
             )}
           </Stack>

@@ -1,5 +1,6 @@
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import type { TraceEntry } from '@doip/shared';
+import { useT } from '../../i18n';
 
 /**
  * 错误解释卡（T11）：NRC / NACK / 超时 三类错误的"是什么 + 常见原因 + 建议动作"。
@@ -71,22 +72,23 @@ const NRC_HINTS: Record<number, { what: string; why: string; do: string }> = {
 
 export function ErrorExplainCard({ entry }: { entry: TraceEntry }): JSX.Element | null {
   const { uds, doip, timeout, errorCode, errorNameZh } = entry;
+  const t = useT();
 
   if (timeout) {
     return (
       <Alert severity="warning" sx={{ fontSize: 12, py: 0.5 }}>
         <Stack spacing={0.25}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            请求超时{errorCode === null ? '' : `（${errorCode}）`}
+            {t('请求超时{code}', { code: errorCode === null ? '' : `（${errorCode}）` })}
           </Typography>
           <Typography variant="caption">
             {errorNameZh ??
               (doip.ackCode !== null
-                ? '网关已收下并转发（收到 0x8002 ACK），但 ECU 未在 P2 时限内响应'
-                : '网关未在时限内返回 ACK/NACK，请求可能未进入网关')}
+                ? t('网关已收下并转发（收到 0x8002 ACK），但 ECU 未在 P2 时限内响应')
+                : t('网关未在时限内返回 ACK/NACK，请求可能未进入网关'))}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            建议：确认目标地址在线、ECU 未处于繁忙/锁定状态；必要时放大 P2 超时或检查故障注入规则。
+            {t('建议：确认目标地址在线、ECU 未处于繁忙/锁定状态；必要时放大 P2 超时或检查故障注入规则。')}
           </Typography>
         </Stack>
       </Alert>
@@ -101,10 +103,10 @@ export function ErrorExplainCard({ entry }: { entry: TraceEntry }): JSX.Element 
             DoIP NACK {hex2(doip.nackCode)}：{doip.nackNameZh ?? ''}
           </Typography>
           <Typography variant="caption">
-            ★这是传输层错误：网关未把报文转发给 ECU，UDS 层还没有被执行（与 NRC 不同，不要按服务问题排查）。
+            {t('★这是传输层错误：网关未把报文转发给 ECU，UDS 层还没有被执行（与 NRC 不同，不要按服务问题排查）。')}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            建议：检查目标逻辑地址 TA 是否存在、路由激活是否成功、报文长度是否超限。
+            {t('建议：检查目标逻辑地址 TA 是否存在、路由激活是否成功、报文长度是否超限。')}
           </Typography>
         </Stack>
       </Alert>
@@ -117,15 +119,15 @@ export function ErrorExplainCard({ entry }: { entry: TraceEntry }): JSX.Element 
       <Alert severity={uds.nrc === 0x78 ? 'info' : 'error'} sx={{ fontSize: 12, py: 0.5 }}>
         <Stack spacing={0.25}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            NRC {hex2(uds.nrc)}：{uds.nrcNameZh ?? uds.nrcName ?? (hint?.what ?? '否定响应')}
+            NRC {hex2(uds.nrc)}：{uds.nrcNameZh ?? uds.nrcName ?? (hint?.what ?? t('否定响应'))}
           </Typography>
           {hint === undefined ? (
-            <Typography variant="caption">{uds.nrcHint ?? 'ECU 返回了否定响应。'}</Typography>
+            <Typography variant="caption">{uds.nrcHint ?? t('ECU 返回了否定响应。')}</Typography>
           ) : (
             <>
-              <Typography variant="caption">是什么：{hint.what}</Typography>
-              <Typography variant="caption">常见原因：{hint.why}</Typography>
-              <Typography variant="caption">建议动作：{hint.do}</Typography>
+              <Typography variant="caption">{t('是什么：{text}', { text: hint.what })}</Typography>
+              <Typography variant="caption">{t('常见原因：{text}', { text: hint.why })}</Typography>
+              <Typography variant="caption">{t('建议动作：{text}', { text: hint.do })}</Typography>
             </>
           )}
         </Stack>

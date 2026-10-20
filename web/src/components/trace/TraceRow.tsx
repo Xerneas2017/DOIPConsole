@@ -4,6 +4,7 @@ import { TRACE_COLUMNS, type TraceColumnId } from '../../store/useUiStore';
 import { pairBorderColor, rowBackground, rowBorderStyle, rowKindOf, rowTextColor } from '../../decode/colorRules';
 import { addressPair, decodeSummary, formatRel, formatTs, hex4, rawHexDisplay, tagText } from '../../decode/displayStrings';
 import { ROW_HEIGHT } from './useVirtualRows';
+import { t } from '../../i18n';
 
 /**
  * 单行渲染（T10）：着色 + 配对左边框 + 组 hover 高亮。
@@ -81,7 +82,7 @@ function TraceRowImpl({
       onClick={() => onSelect(entry.seq)}
       onMouseEnter={() => onHoverTxn(entry.transactionId)}
       onMouseLeave={() => onHoverTxn(null)}
-      title={`seq ${entry.seq}｜${entry.txnRole ?? '-'}｜${entry.transactionId ?? '无事务'}`}
+      title={`seq ${entry.seq}｜${entry.txnRole ?? '-'}｜${entry.transactionId ?? t('无事务')}`}
     >
       {TRACE_COLUMNS.filter((c) => columns.includes(c.id)).map((c) => (
         <div

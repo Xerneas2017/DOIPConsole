@@ -3,6 +3,7 @@ import { TIMING } from '@doip/shared';
 import { sendCommand } from '../../ws/useWsConnection';
 import { useConnectionStore } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useT } from '../../i18n';
 
 /**
  * 路由激活卡片（T11，A 区）：SA/TA/激活类型/协议版本 + 最近响应码 + [重激活]。
@@ -11,6 +12,7 @@ import { useUiStore } from '../../store/useUiStore';
 export function RoutingActivationCard(): JSX.Element {
   const status = useConnectionStore((s) => s.status);
   const ui = useUiStore();
+  const t = useT();
 
   const active = status?.state === 'ROUTING_ACTIVE';
   const code = status?.lastRoutingCode ?? null;
@@ -20,7 +22,7 @@ export function RoutingActivationCard(): JSX.Element {
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
         <Typography variant="caption" sx={{ fontWeight: 700 }}>
-          路由激活
+          {t('路由激活')}
         </Typography>
         <Box
           sx={{
@@ -39,12 +41,12 @@ export function RoutingActivationCard(): JSX.Element {
         <Row label="SA" value={status === null ? ui.sa : `0x${status.sa.toString(16).toUpperCase().padStart(4, '0')}`} />
         <Row label="TA" value={status === null ? ui.ta : `0x${status.ta.toString(16).toUpperCase().padStart(4, '0')}`} />
         <Row
-          label="激活类型"
+          label={t('激活类型')}
           value={status === null ? '-' : `0x${status.activationType.toString(16).toUpperCase().padStart(2, '0')}`}
         />
-        <Row label="协议版本" value={status === null ? '-' : `0x0${status.protocolVersion}`} />
+        <Row label={t('协议版本')} value={status === null ? '-' : `0x0${status.protocolVersion}`} />
         <Row
-          label="最近响应码"
+          label={t('最近响应码')}
           value={code === null ? '-' : `0x${code.toString(16).toUpperCase().padStart(2, '0')} ${codeZh ?? ''}`}
           color={active ? 'success.main' : code === null ? undefined : 'warning.main'}
         />
@@ -54,8 +56,8 @@ export function RoutingActivationCard(): JSX.Element {
         <Tooltip
           title={
             active
-              ? `同一 socket 上重发 0x0005（最小间隔 ${TIMING.ROUTING_REACTIVATE_MIN_INTERVAL_MS} ms）`
-              : '仅在已建立 TCP 连接后可用'
+              ? t('同一 socket 上重发 0x0005（最小间隔 {ms} ms）', { ms: TIMING.ROUTING_REACTIVATE_MIN_INTERVAL_MS })
+              : t('仅在已建立 TCP 连接后可用')
           }
         >
           <span>
@@ -65,7 +67,7 @@ export function RoutingActivationCard(): JSX.Element {
               disabled={!active}
               onClick={() => sendCommand('routing.reactivate', {})}
             >
-              重激活
+              {t('重激活')}
             </Button>
           </span>
         </Tooltip>

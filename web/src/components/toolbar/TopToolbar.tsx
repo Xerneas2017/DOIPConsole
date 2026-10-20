@@ -2,11 +2,14 @@ import { useEffect, useMemo } from 'react';
 import { Box, Paper, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import { TIMING } from '@doip/shared';
 import { sendCommand } from '../../ws/useWsConnection';
-import { useConnectionStore, WS_STATUS_LABEL } from '../../store/useConnectionStore';
+import { useConnectionStore } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useT } from '../../i18n';
+import type { TKey } from '../../i18n';
+import { LanguageSwitch } from '../common/LanguageSwitch';
 
 /**
- * 顶部工具栏（T11）：模式切换、目标 IP/端口、连接/断开、发现扫描、服务库。
+ * 顶部工具栏（T11）：模式切换、目标 IP/端口、连接/断开、发现扫描、服务库、语言切换。
  * ★Q11：后端只监听 127.0.0.1，仿真模式默认指向本机仿真端口。
  */
 export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): JSX.Element {
@@ -18,15 +21,31 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
   /** ★仿真是否在跑：决定「连接」要不要先自动启动仿真 */
   const simRunning = useConnectionStore((s) => s.sim?.running ?? false);
   const ui = useUiStore();
+  const t = useT();
+
+  /** WS 状态 → 本地化标签（原 WS_STATUS_LABEL 常量已由 i18n 取代） */
+  const wsStatusLabel = (value: typeof wsStatus): string => {
+    const key: TKey =
+      value === 'open'
+        ? '已连接'
+        : value === 'connecting'
+          ? '连接中'
+          : value === 'reconnecting'
+            ? '自动重连中'
+            : value === 'closed'
+              ? '已断开'
+              : '未连接';
+    return t(key);
+  };
 
   const connected = status !== null && status.state === 'ROUTING_ACTIVE';
   const busy = status !== null && (status.state === 'TCP_CONNECTING' || status.state === 'ROUTING_ACTIVATING');
 
   const connectLabel = useMemo(() => {
-    if (busy) return '连接中…';
-    if (connected) return '断开';
-    return '连接';
-  }, [busy, connected]);
+    if (busy) return t('连接中…');
+    if (connected) return t('断开');
+    return t('连接');
+  }, [busy, connected, t]);
 
   const handleConnect = (): void => {
     if (connected) {
@@ -111,7 +130,7 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
       }}
     >
       <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: 0.3 }}>
-        DoIP 诊断控制台
+        {t('DoIP 诊断控制台')}
       </Typography>
 
       <ToggleButtonGroup
@@ -124,16 +143,16 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
         }}
       >
         <ToggleButton value="real" sx={{ px: 1.25, py: 0.25, fontSize: 12 }}>
-          真实 ECU
+          {t('真实 ECU')}
         </ToggleButton>
         <ToggleButton value="sim" sx={{ px: 1.25, py: 0.25, fontSize: 12 }}>
-          仿真 ECU
+          {t('仿真 ECU')}
         </ToggleButton>
       </ToggleButtonGroup>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          目标
+          {t('目标')}
         </Typography>
         <input
           className="mono"
@@ -197,7 +216,7 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
           cursor: wsStatus === 'open' && !scanning ? 'pointer' : 'not-allowed',
         }}
       >
-        {scanning ? '扫描中…' : '车辆发现'}
+        {scanning ? t('扫描中…') : t('车辆发现')}
       </button>
 
       <button
@@ -213,8 +232,16 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
           cursor: 'pointer',
         }}
       >
-        服务库
+        {t('服务库')}
       </button>
+
+      {/**
+       * ★语言切换：中文 / English / Deutsch。
+       *   放在"全局设置"区（右对齐、WS 状态灯之前），不打断诊断操作流。
+       */}
+      <Box sx={{ ml: 'auto', flexShrink: 0 }}>
+        <LanguageSwitch />
+      </Box>
 
       {/**
        * ★裁定①：WS 状态 + 断线归因必须显式可见。
@@ -224,11 +251,11 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
       <Tooltip
         title={
           wsDetail === null
-            ? `WebSocket：${WS_STATUS_LABEL[wsStatus]}（${wsStatus}）`
-            : `WebSocket：${WS_STATUS_LABEL[wsStatus]}（${wsStatus}）\n${wsDetail}`
+            ? t('WebSocket：{label}（{status}）', { label: wsStatusLabel(wsStatus), status: wsStatus })
+            : `${t('WebSocket：{label}（{status}）', { label: wsStatusLabel(wsStatus), status: wsStatus })}\n${wsDetail}`
         }
       >
-        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
           <Box
             sx={{
               width: 8,
@@ -239,7 +266,7 @@ export function TopToolbar({ onOpenLibrary }: { onOpenLibrary?: () => void }): J
             }}
           />
           <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
-            {WS_STATUS_LABEL[wsStatus]}
+            {wsStatusLabel(wsStatus)}
           </Typography>
           {wsDetail !== null ? (
             <Typography

@@ -6,6 +6,8 @@ import { ROW_LEGEND, rowBackground } from '../../decode/colorRules';
 import { useTraceStore } from '../../store/useTraceStore';
 import { TRACE_COLUMNS, useUiStore } from '../../store/useUiStore';
 import { notify } from '../common/SnackHost';
+import { useT } from '../../i18n';
+import type { TKey } from '../../i18n';
 
 /**
  * 过滤栏（T10）：Wireshark 风格表达式 + 预设 chips + 列设置。
@@ -19,6 +21,13 @@ export function FilterBar(): JSX.Element {
   const entries = useTraceStore((s) => s.entries);
   const visibleColumns = useUiStore((s) => s.visibleColumns);
   const toggleColumn = useUiStore((s) => s.toggleColumn);
+  const t = useT();
+
+  /**
+   * 预设/图例的 label 来自受控常量表（decode/ 下），全部已在字典登记；
+   * 这里集中断言一次，避免在每个 map 里散落 as。
+   */
+  const labelOf = (label: string): string => t(label as TKey);
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -46,11 +55,11 @@ export function FilterBar(): JSX.Element {
       <TextField
         inputRef={inputRef}
         size="small"
-        placeholder="过滤：doip.type == 0x8001 && uds.sid == 0x22"
+        placeholder={t('过滤：doip.type == 0x8001 && uds.sid == 0x22')}
         value={filterExpr}
         onChange={(e) => setFilterExpr(e.target.value)}
         error={!valid}
-        helperText={valid ? undefined : '表达式无法解析（按未过滤显示）'}
+        helperText={valid ? undefined : t('表达式无法解析（按未过滤显示）')}
         sx={{ flex: 1, maxWidth: 520 }}
         inputProps={{ className: 'mono', spellCheck: false }}
       />
@@ -59,7 +68,7 @@ export function FilterBar(): JSX.Element {
         <Chip
           key={p.label}
           size="small"
-          label={p.label}
+          label={labelOf(p.label)}
           variant={filterExpr === p.expr ? 'filled' : 'outlined'}
           onClick={() => setFilterExpr(filterExpr === p.expr ? '' : p.expr)}
           sx={{ height: 22, fontSize: 11 }}
@@ -68,19 +77,19 @@ export function FilterBar(): JSX.Element {
 
       <Chip
         size="small"
-        label="隐藏周期 3E"
+        label={t('隐藏周期 3E')}
         color={hidePeriodic ? 'primary' : 'default'}
         variant={hidePeriodic ? 'filled' : 'outlined'}
         onClick={() => setHidePeriodic(!hidePeriodic)}
         sx={{ height: 22, fontSize: 11 }}
       />
 
-      <Tooltip title="复制当前过滤表达式">
+      <Tooltip title={t('复制当前过滤表达式')}>
         <IconButton
           size="small"
           onClick={() => {
             void navigator.clipboard.writeText(filterExpr);
-            notify('已复制过滤表达式', 'info');
+            notify(t('已复制过滤表达式'), 'info');
           }}
           disabled={filterExpr === ''}
         >
@@ -93,7 +102,7 @@ export function FilterBar(): JSX.Element {
         <Divider orientation="vertical" flexItem />
         <Chip
           size="small"
-          label="列设置"
+          label={t('列设置')}
           onClick={(e) => setAnchorEl(e.currentTarget)}
           sx={{ height: 22, fontSize: 11 }}
         />
@@ -132,7 +141,7 @@ export function FilterBar(): JSX.Element {
                   }}
                 />
                 <Box component="span" sx={{ fontSize: 11, color: 'text.secondary' }}>
-                  {l.label}
+                  {labelOf(l.label)}
                 </Box>
               </Stack>
             ))}
@@ -144,9 +153,10 @@ export function FilterBar(): JSX.Element {
 }
 
 function TypographyCount({ total }: { total: number }): JSX.Element {
+  const t = useT();
   return (
     <Box component="span" sx={{ fontSize: 11, color: 'text.secondary' }} className="mono">
-      缓冲 {total}
+      {t('缓冲 {total}', { total })}
     </Box>
   );
 }

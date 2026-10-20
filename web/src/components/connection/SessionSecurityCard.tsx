@@ -4,6 +4,7 @@ import { TIMING } from '@doip/shared';
 import { sendCommand } from '../../ws/useWsConnection';
 import { useConnectionStore } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useT } from '../../i18n';
 
 /**
  * 会话与解锁卡片（T11，A 区）：当前 UDS 会话、解锁等级、S3 倒计时、3E 心跳开关与周期。
@@ -13,6 +14,7 @@ export function SessionSecurityCard(): JSX.Element {
   const status = useConnectionStore((s) => s.status);
   const periodMs = useUiStore((s) => s.testerPresentPeriodMs);
   const setPeriodMs = useUiStore((s) => s.setTesterPresentPeriodMs);
+  const t = useT();
 
   const [s3Now, setS3Now] = useState<number | null>(status?.s3RemainingMs ?? null);
 
@@ -32,12 +34,12 @@ export function SessionSecurityCard(): JSX.Element {
   return (
     <Box>
       <Typography variant="caption" sx={{ fontWeight: 700 }}>
-        会话与解锁
+        {t('会话与解锁')}
       </Typography>
 
       <Stack direction="row" spacing={0.5} alignItems="center" sx={{ my: 0.5 }}>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          当前会话
+          {t('当前会话')}
         </Typography>
         <Chip
           size="small"
@@ -49,7 +51,7 @@ export function SessionSecurityCard(): JSX.Element {
 
       <Stack direction="row" spacing={0.5} alignItems="center">
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          解锁等级
+          {t('解锁等级')}
         </Typography>
         {[1, 2, 3].map((level) => {
           const unlocked = status?.securityLevels.includes(level) ?? false;
@@ -69,7 +71,7 @@ export function SessionSecurityCard(): JSX.Element {
       <Stack direction="row" spacing={2} sx={{ mt: 0.75 }}>
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            S3 倒计时
+            {t('S3 倒计时')}
           </Typography>
           <Typography
             variant="body2"
@@ -81,10 +83,10 @@ export function SessionSecurityCard(): JSX.Element {
         </Box>
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            3E 心跳
+            {t('3E 心跳')}
           </Typography>
           <Typography variant="body2" className="mono" sx={{ fontWeight: 600 }}>
-            {enabled ? `▶ ${(periodMs / 1000).toFixed(1)} s` : '⏸ 已停'}
+            {enabled ? t('▶ {seconds} s', { seconds: (periodMs / 1000).toFixed(1) }) : t('⏸ 已停')}
           </Typography>
         </Box>
       </Stack>
@@ -98,12 +100,17 @@ export function SessionSecurityCard(): JSX.Element {
             onChange={(e) => sendCommand('testerPresent', { enable: e.target.checked, periodMs })}
           />
         }
-        label={<Typography variant="caption">自动 TesterPresent</Typography>}
+        label={<Typography variant="caption">{t('自动 TesterPresent')}</Typography>}
       />
 
-      <Tooltip title={`范围 ${TIMING.TESTER_PRESENT_MIN_PERIOD_MS}–${TIMING.TESTER_PRESENT_MAX_PERIOD_MS} ms`}>
+      <Tooltip
+        title={t('范围 {min}–{max} ms', {
+          min: TIMING.TESTER_PRESENT_MIN_PERIOD_MS,
+          max: TIMING.TESTER_PRESENT_MAX_PERIOD_MS,
+        })}
+      >
         <TextField
-          label="周期 (ms)"
+          label={t('周期 (ms)')}
           size="small"
           value={periodMs}
           onChange={(e) => {

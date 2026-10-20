@@ -20,6 +20,7 @@ import { useTraceStore } from './store/useTraceStore';
 import { useUiStore } from './store/useUiStore';
 import { useConnectionStore } from './store/useConnectionStore';
 import { useLibraryStore } from './store/useLibraryStore';
+import { useT } from './i18n';
 
 /**
  * 应用根组件（T08 + T13/T14 装配）：五分区 + WebSocket + 全局快捷键。
@@ -27,6 +28,7 @@ import { useLibraryStore } from './store/useLibraryStore';
  * B 区 = 服务请求 / 安全解锁（双页签）；F 区 = 服务库编辑器（由工具栏按钮打开）。
  */
 export function App(): JSX.Element {
+  const t = useT();
   const { resyncNow } = useResync();
   const setPaused = useTraceStore((s) => s.setPaused);
   const clear = useTraceStore((s) => s.clear);
@@ -111,15 +113,15 @@ export function App(): JSX.Element {
           onChange={(_e, next: 'request' | 'security') => setRequestTab(next)}
           sx={{ minHeight: 32, borderBottom: 1, borderColor: 'divider' }}
         >
-          <Tab value="request" label="服务请求" sx={{ minHeight: 32, py: 0, fontSize: 12 }} />
-          <Tab value="security" label="安全解锁 0x27" sx={{ minHeight: 32, py: 0, fontSize: 12 }} />
+          <Tab value="request" label={t('服务请求')} sx={{ minHeight: 32, py: 0, fontSize: 12 }} />
+          <Tab value="security" label={t('安全解锁 0x27')} sx={{ minHeight: 32, py: 0, fontSize: 12 }} />
         </Tabs>
         <Box sx={{ flex: 1, minHeight: 0 }}>
           {requestTab === 'request' ? <ServiceRequestPanel /> : <SecurityAccessPanel />}
         </Box>
       </Box>
     ),
-    [requestTab],
+    [requestTab, t],
   );
 
   const onOpenLibrary = useCallback(() => {

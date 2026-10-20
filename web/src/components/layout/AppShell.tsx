@@ -4,6 +4,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useUiStore } from '../../store/useUiStore';
+import { useT } from '../../i18n';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 
 /**
@@ -43,6 +44,7 @@ export function AppShell({
   const detailHeight = useUiStore((s) => s.detailHeight);
   const setLeftCollapsed = useUiStore((s) => s.setLeftCollapsed);
   const setBottomCollapsed = useUiStore((s) => s.setBottomCollapsed);
+  const t = useT();
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -53,7 +55,7 @@ export function AppShell({
         <Box sx={{ width: leftCollapsed ? 32 : leftWidth, flexShrink: 0, position: 'relative' }}>
           {leftCollapsed ? (
             <Stack alignItems="center" sx={{ pt: 1 }}>
-              <Tooltip title="展开连接面板">
+              <Tooltip title={t('展开连接面板')}>
                 <IconButton size="small" onClick={() => setLeftCollapsed(false)}>
                   <ChevronRightIcon fontSize="small" />
                 </IconButton>
@@ -62,13 +64,13 @@ export function AppShell({
                 variant="caption"
                 sx={{ writingMode: 'vertical-rl', mt: 1, color: 'text.secondary' }}
               >
-                A 连接
+                {t('A 连接')}
               </Typography>
             </Stack>
           ) : (
             <Box sx={{ height: '100%', position: 'relative' }}>
-              <ErrorBoundary zone="A 区连接面板">{panelA}</ErrorBoundary>
-              <Tooltip title="折叠">
+              <ErrorBoundary zone={t('A 区连接面板')}>{panelA}</ErrorBoundary>
+              <Tooltip title={t('折叠')}>
                 <IconButton
                   size="small"
                   onClick={() => setLeftCollapsed(true)}
@@ -90,11 +92,11 @@ export function AppShell({
             原始 hex 输入框也同样被裁，看起来就像"不能自己输入报文"。
           */}
           <Box sx={{ height: 200, flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-            <ErrorBoundary zone="B 区服务请求">{panelB}</ErrorBoundary>
+            <ErrorBoundary zone={t('B 区服务请求')}>{panelB}</ErrorBoundary>
           </Box>
 
           <Box sx={{ flex: 1, minHeight: 0 }}>
-            <ErrorBoundary zone="C 区 Trace">{panelC}</ErrorBoundary>
+            <ErrorBoundary zone={t('C 区 Trace')}>{panelC}</ErrorBoundary>
           </Box>
 
           <Box
@@ -122,10 +124,10 @@ export function AppShell({
               }}
             >
               <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                D 详情 / 响应解码树
+                {t('D 详情 / 响应解码树')}
               </Typography>
               <Box sx={{ ml: 'auto' }}>
-                <Tooltip title={bottomCollapsed ? '展开' : '折叠'}>
+                <Tooltip title={bottomCollapsed ? t('展开') : t('折叠')}>
                   <IconButton size="small" onClick={() => setBottomCollapsed(!bottomCollapsed)}>
                     {bottomCollapsed ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                   </IconButton>
@@ -134,7 +136,7 @@ export function AppShell({
             </Paper>
             {bottomCollapsed ? null : (
               <Box sx={{ flex: 1, minHeight: 0 }}>
-                <ErrorBoundary zone="D 区详情">{panelD}</ErrorBoundary>
+                <ErrorBoundary zone={t('D 区详情')}>{panelD}</ErrorBoundary>
               </Box>
             )}
           </Box>
@@ -142,7 +144,7 @@ export function AppShell({
       </Box>
 
       {/* E 区 */}
-      <ErrorBoundary zone="E 区状态栏">{statusBar}</ErrorBoundary>
+      <ErrorBoundary zone={t('E 区状态栏')}>{statusBar}</ErrorBoundary>
     </Box>
   );
 }

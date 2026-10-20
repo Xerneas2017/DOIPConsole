@@ -30,6 +30,8 @@ import {
   type LibraryValidationIssue,
 } from '../../store/useLibraryStore';
 import { sendCommand } from '../../ws/useWsConnection';
+import { useT } from '../../i18n';
+import type { TKey } from '../../i18n';
 
 /**
  * F 区服务库编辑器（T12）。
@@ -67,6 +69,7 @@ export function LibraryDialog(): JSX.Element {
   const setDraft = useLibraryStore((s) => s.setDraft);
   const setIssues = useLibraryStore((s) => s.setIssues);
   const closeEditor = useLibraryStore((s) => s.closeEditor);
+  const t = useT();
 
   const working: UdsLibrary | null = draft ?? library;
 
@@ -127,20 +130,20 @@ export function LibraryDialog(): JSX.Element {
   return (
     <Dialog open={open} onClose={closeEditor} maxWidth="lg" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        服务库编辑器
-        <Chip size="small" label="改动后下一次解码立即生效，并 repatch 最近 2000 条" />
+        {t('服务库编辑器')}
+        <Chip size="small" label={t('改动后下一次解码立即生效，并 repatch 最近 2000 条')} />
         <Box sx={{ ml: 'auto', display: 'flex', gap: 0.5 }}>
-          <Tooltip title="导出 JSON">
+          <Tooltip title={t('导出 JSON')}>
             <IconButton size="small" onClick={onExport}>
               <DownloadIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="导入 JSON">
+          <Tooltip title={t('导入 JSON')}>
             <IconButton size="small" onClick={onImport}>
               <UploadIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="重置为内置基线">
+          <Tooltip title={t('重置为内置基线')}>
             <IconButton size="small" onClick={onReset}>
               <RestartAltIcon fontSize="small" />
             </IconButton>
@@ -154,15 +157,15 @@ export function LibraryDialog(): JSX.Element {
         variant="scrollable"
         sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {TABS.map((t) => (
-          <Tab key={t.id} value={t.id} label={t.label} />
+        {TABS.map((item) => (
+          <Tab key={item.id} value={item.id} label={t(item.label as TKey)} />
         ))}
       </Tabs>
 
       <DialogContent dividers sx={{ minHeight: 320 }}>
         {issues.length > 0 ? <IssueList issues={issues} /> : null}
         {working === null ? (
-          <Alert severity="info">服务库尚未加载</Alert>
+          <Alert severity="info">{t('服务库尚未加载')}</Alert>
         ) : tab === 'services' ? (
           <ServicesTab lib={working} mutate={mutate} />
         ) : tab === 'subFunctions' ? (
@@ -220,14 +223,14 @@ export function LibraryDialog(): JSX.Element {
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={closeEditor}>关闭</Button>
+        <Button onClick={closeEditor}>{t('关闭')}</Button>
         <Button
           variant="contained"
           startIcon={<SaveIcon fontSize="small" />}
           onClick={onSave}
           disabled={working === null}
         >
-          保存（校验后入库）
+          {t('保存（校验后入库）')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -235,9 +238,12 @@ export function LibraryDialog(): JSX.Element {
 }
 
 function IssueList({ issues }: { issues: LibraryValidationIssue[] }): JSX.Element {
+  const t = useT();
   return (
     <Alert severity="error" sx={{ mb: 1 }}>
-      <Typography variant="subtitle2">服务库被拒绝，已保留原库（{issues.length} 处问题）</Typography>
+      <Typography variant="subtitle2">
+        {t('服务库被拒绝，已保留原库（{count} 处问题）', { count: issues.length })}
+      </Typography>
       <Box component="ul" sx={{ m: 0, pl: 2, maxHeight: 120, overflow: 'auto' }}>
         {issues.slice(0, 20).map((issue, i) => (
           <li key={`${issue.path}-${String(i)}`}>

@@ -21,6 +21,7 @@ import { LOGGING } from '@doip/shared';
 import { useUiStore } from '../../store/useUiStore';
 import { useConnectionStore } from '../../store/useConnectionStore';
 import { sendCommand } from '../../ws/useWsConnection';
+import { useT } from '../../i18n';
 
 /**
  * 运行日志面板（自我排查）。
@@ -45,6 +46,7 @@ export function LogDialog(): JSX.Element {
   const [onlyErrors, setOnlyErrors] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const t = useT();
 
   // 打开时立即拉一次
   useEffect(() => {
@@ -84,23 +86,29 @@ export function LogDialog(): JSX.Element {
     <Dialog open={open} onClose={() => setLogOpen(false)} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         <ArticleIcon fontSize="small" />
-        后端运行日志
+        {t('后端运行日志')}
         <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
           {status === null
-            ? '加载中…'
-            : `已记录 ${status.lines} 行 · 当前文件 ${status.bytes} B · 保留 ${status.files.length} 个文件`}
+            ? t('加载中…')
+            : t('已记录 {lines} 行 · 当前文件 {bytes} B · 保留 {files} 个文件', {
+                lines: status.lines,
+                bytes: status.bytes,
+                files: status.files.length,
+              })}
         </Typography>
       </DialogTitle>
 
       <DialogContent dividers sx={{ pt: 1.5 }}>
         {status !== null && status.dropped > 0 && (
           <Alert severity="warning" sx={{ mb: 1.5 }}>
-            日志有 {status.dropped} 行因写入失败被丢弃（磁盘或权限问题），排查时请留意日志不完整。
+            {t('日志有 {count} 行因写入失败被丢弃（磁盘或权限问题），排查时请留意日志不完整。', {
+              count: status.dropped,
+            })}
           </Alert>
         )}
         {wsStatus !== 'open' && (
           <Alert severity="info" sx={{ mb: 1.5 }}>
-            与后端的连接当前不是打开状态，显示的是上一次拉取的内容。
+            {t('与后端的连接当前不是打开状态，显示的是上一次拉取的内容。')}
           </Alert>
         )}
 
@@ -109,15 +117,19 @@ export function LogDialog(): JSX.Element {
             control={
               <Switch size="small" checked={onlyErrors} onChange={(e) => setOnlyErrors(e.target.checked)} />
             }
-            label={<Typography variant="caption">只看警告/错误</Typography>}
+            label={<Typography variant="caption">{t('只看警告/错误')}</Typography>}
           />
           <FormControlLabel
             control={
               <Switch size="small" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
             }
-            label={<Typography variant="caption">自动刷新</Typography>}
+            label={<Typography variant="caption">{t('自动刷新')}</Typography>}
           />
-          <Chip size="small" variant="outlined" label={truncated ? '仅显示最近若干行' : '已含全部现有日志'} />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={truncated ? t('仅显示最近若干行') : t('已含全部现有日志')}
+          />
         </Stack>
 
         <Box
@@ -139,7 +151,7 @@ export function LogDialog(): JSX.Element {
         >
           {visible.length === 0 ? (
             <Typography variant="caption" color="text.secondary">
-              {lines.length === 0 ? '（暂无日志）' : '（当前过滤条件下没有匹配行）'}
+              {lines.length === 0 ? t('（暂无日志）') : t('（当前过滤条件下没有匹配行）')}
             </Typography>
           ) : (
             visible.map((line, i) => (
@@ -151,25 +163,25 @@ export function LogDialog(): JSX.Element {
         </Box>
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          目录：{status?.dir ?? '—'}
+          {t('目录：{dir}', { dir: status?.dir ?? '—' })}
         </Typography>
       </DialogContent>
 
       <DialogActions>
-        <Tooltip title="在文件管理器里打开日志目录">
+        <Tooltip title={t('在文件管理器里打开日志目录')}>
           <Button
             size="small"
             startIcon={<FolderOpenIcon fontSize="small" />}
             onClick={() => sendCommand('log.openDir', {})}
           >
-            打开目录
+            {t('打开目录')}
           </Button>
         </Tooltip>
         <Button size="small" startIcon={<RefreshIcon fontSize="small" />} onClick={refresh}>
-          刷新
+          {t('刷新')}
         </Button>
         <Button size="small" onClick={() => setLogOpen(false)}>
-          关闭
+          {t('关闭')}
         </Button>
       </DialogActions>
     </Dialog>

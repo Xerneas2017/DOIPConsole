@@ -12,6 +12,8 @@ import { buildDisplayRows } from './gapMerge';
 import type { MergedRow } from './gapMerge';
 import { decodeSummary, rawHexDisplay } from '../../decode/displayStrings';
 import { notify } from '../common/SnackHost';
+import { useT } from '../../i18n';
+import type { TFunc } from '../../i18n';
 
 /**
  * C 区 Trace 表格（T10）。
@@ -43,6 +45,7 @@ export function TraceTable(): JSX.Element {
 
   const visibleColumns = useUiStore((s) => s.visibleColumns);
   const useUtc = useUiStore((s) => s.useUtc);
+  const t = useT();
 
   const { rows, invalidExpr } = useFilteredRows(entries, filterExpr, hidePeriodic);
 
@@ -84,9 +87,9 @@ export function TraceTable(): JSX.Element {
   const copy = async (text: string, what: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
-      notify(`已复制${what}`, 'info');
+      notify(t('已复制{what}', { what }), 'info');
     } catch {
-      notify('复制失败（浏览器剪贴板不可用）', 'warn');
+      notify(t('复制失败（浏览器剪贴板不可用）'), 'warn');
     }
   };
 
@@ -98,8 +101,8 @@ export function TraceTable(): JSX.Element {
           <TraceToolbar />
         </Box>
         <EmptyState
-          title="暂无报文"
-          hint="启动仿真 ECU → 车辆发现 → 连接 → 路由激活后，Trace 会实时显示（含 UDP 发现与 TCP 诊断报文）"
+          title={t('暂无报文')}
+          hint={t('启动仿真 ECU → 车辆发现 → 连接 → 路由激活后，Trace 会实时显示（含 UDP 发现与 TCP 诊断报文）')}
         />
       </Box>
     );
@@ -112,7 +115,7 @@ export function TraceTable(): JSX.Element {
         <TraceToolbar />
         {invalidExpr ? (
           <Typography variant="caption" sx={{ color: 'error.main' }}>
-            过滤表达式无法解析，当前按未过滤显示（不会静默丢行）
+            {t('过滤表达式无法解析，当前按未过滤显示（不会静默丢行）')}
           </Typography>
         ) : null}
       </Box>
@@ -191,11 +194,18 @@ export function TraceTable(): JSX.Element {
                       borderBottom: '1px dashed #4b5563',
                     }}
                     title={
-                      `seq ${row.seq} 起缺失 ${row.count} 条（${GAP_REASON_ZH[row.reason] ?? row.reason}）` +
-                      '\n会自动按 seq 顺序向后端请求补齐；若后端环形缓冲已回绕覆盖该段，则不可恢复。'
+                      t('⋯ 缺口：seq {seq} 起缺失 {count} 条（{reason}）', {
+                        seq: row.seq,
+                        count: row.count,
+                        reason: gapReasonLabel(row.reason, t),
+                      }) + `\n${t('会自动按 seq 顺序向后端请求补齐；若后端环形缓冲已回绕覆盖该段，则不可恢复。')}`
                     }
                   >
-                    ⋯ 缺口：seq {row.seq} 起缺失 {row.count} 条（{GAP_REASON_ZH[row.reason] ?? row.reason}）
+                    {t('⋯ 缺口：seq {seq} 起缺失 {count} 条（{reason}）', {
+                      seq: row.seq,
+                      count: row.count,
+                      reason: gapReasonLabel(row.reason, t),
+                    })}
                   </Box>
                 ) : (
                   <TraceRow
@@ -228,33 +238,33 @@ export function TraceTable(): JSX.Element {
           sx={{ fontSize: 12 }}
           onClick={() => {
             const e = menu === null ? null : entryOf(menu.seq);
-            if (e !== null) void copy(JSON.stringify(e), `第 ${e.seq} 行 JSON`);
+            if (e !== null) void copy(JSON.stringify(e), t('第 {seq} 行 JSON', { seq: e.seq }));
             closeMenu();
           }}
         >
-          复制行（JSON）
+          {t('复制行（JSON）')}
         </MenuItem>
         <MenuItem
           dense
           sx={{ fontSize: 12 }}
           onClick={() => {
             const e = menu === null ? null : entryOf(menu.seq);
-            if (e !== null) void copy(rawHexDisplay(e), `第 ${e.seq} 行 hex`);
+            if (e !== null) void copy(rawHexDisplay(e), t('第 {seq} 行 hex', { seq: e.seq }));
             closeMenu();
           }}
         >
-          复制 hex
+          {t('复制 hex')}
         </MenuItem>
         <MenuItem
           dense
           sx={{ fontSize: 12 }}
           onClick={() => {
             const e = menu === null ? null : entryOf(menu.seq);
-            if (e !== null) void copy(decodeSummary(e), `第 ${e.seq} 行解码串`);
+            if (e !== null) void copy(decodeSummary(e), t('第 {seq} 行解码串', { seq: e.seq }));
             closeMenu();
           }}
         >
-          复制解码串
+          {t('复制解码串')}
         </MenuItem>
         <MenuItem
           dense
@@ -264,24 +274,24 @@ export function TraceTable(): JSX.Element {
             closeMenu();
           }}
         >
-          在 D 区详情中查看
+          {t('在 D 区详情中查看')}
         </MenuItem>
         <MenuItem dense disabled sx={{ fontSize: 12 }} title="B 区请求编排将在 M4/T13 提供">
-          以此为模板新建请求（T13）
+          {t('以此为模板新建请求（T13）')}
         </MenuItem>
         </Menu>
       )}
 
       <Stack direction="row" spacing={2} sx={{ px: 1, py: 0.25, borderTop: '1px solid', borderColor: 'divider' }}>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          显示 {rows.length} / {entries.length} 条
+          {t('显示 {shown} / {total} 条', { shown: rows.length, total: entries.length })}
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          缺口 {gaps.length} 段
+          {t('缺口 {count} 段', { count: gaps.length })}
         </Typography>
         {gaps.length > 0 ? (
           <Typography variant="caption" sx={{ color: 'warning.main' }}>
-            存在 seq 缺口（背压或缓冲溢出），seq 链条仍连续可审计
+            {t('存在 seq 缺口（背压或缓冲溢出），seq 链条仍连续可审计')}
           </Typography>
         ) : null}
       </Stack>
@@ -289,9 +299,10 @@ export function TraceTable(): JSX.Element {
   );
 }
 
-const GAP_REASON_ZH: Record<string, string> = {
-  backpressure: 'WS 背压降级',
-  overflow: '缓冲溢出淘汰',
-  // ★不承诺「补齐中」：后端环形缓冲若已回绕覆盖该段，永远补不回来（QA 终验缺陷 4 的文案问题）
-  local: '本地断号',
-};
+/** 缺口原因 → 本地化文案（reason 来自后端，未知值原样显示） */
+function gapReasonLabel(reason: string, t: TFunc): string {
+  if (reason === 'backpressure') return t('WS 背压降级');
+  if (reason === 'overflow') return t('缓冲溢出淘汰');
+  if (reason === 'local') return t('本地断号');
+  return reason;
+}

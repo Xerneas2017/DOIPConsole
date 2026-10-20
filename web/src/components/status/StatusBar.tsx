@@ -6,6 +6,7 @@ import { useTraceStore } from '../../store/useTraceStore';
 import { useUiStore } from '../../store/useUiStore';
 import { sendCommand } from '../../ws/useWsConnection';
 import { stateColor } from '../../decode/displayStrings';
+import { useT } from '../../i18n';
 
 /**
  * E 区状态栏（T11，PRD §6.2）：7 项指标
@@ -29,6 +30,7 @@ export function StatusBar(): JSX.Element {
   const stale = useConnectionStore((s) => s.stale);
   const setExportOpen = useUiStore((s) => s.setExportOpen);
   const setLogOpen = useUiStore((s) => s.setLogOpen);
+  const t = useT();
 
   const connected = !stale && status !== null && status.state === 'ROUTING_ACTIVE';
   const s3 = stale ? null : (status?.s3RemainingMs ?? null);
@@ -69,14 +71,14 @@ export function StatusBar(): JSX.Element {
           className="mono"
           {...(stale ? { sx: { color: 'text.disabled' } } : {})}
         >
-          {stale ? '未知' : (status?.state ?? 'DISCONNECTED')}
+          {stale ? t('未知') : (status?.state ?? 'DISCONNECTED')}
         </Box>
       </Stack>
       {stale ? (
         <Chip
           size="small"
           color="warning"
-          label="后端连接已断开 · 状态未知"
+          label={t('后端连接已断开 · 状态未知')}
           sx={{ height: 16, fontSize: 10 }}
         />
       ) : null}
@@ -85,23 +87,23 @@ export function StatusBar(): JSX.Element {
 
       {/* ② 路由激活 */}
       <Field
-        label="路由"
+        label={t('路由')}
         value={
           routingCode === null || routingCode === undefined
             ? '-'
             : `0x${routingCode.toString(16).toUpperCase().padStart(2, '0')}`
         }
-        tooltip={stale ? '后端已断开，路由激活状态未知' : (status?.lastRoutingCodeZh ?? undefined)}
+        tooltip={stale ? t('后端已断开，路由激活状态未知') : (status?.lastRoutingCodeZh ?? undefined)}
         color={connected ? 'success.main' : 'text.secondary'}
       />
 
       {/* ③ UDS 会话 */}
-      <Field label="会话" value={stale ? '未知' : (status?.udsSession ?? 'DEFAULT')} />
+      <Field label={t('会话')} value={stale ? t('未知') : (status?.udsSession ?? 'DEFAULT')} />
 
       {/* ④ 解锁等级 */}
       <Stack direction="row" spacing={0.25} alignItems="center">
         <Box component="span" sx={{ color: 'text.secondary' }}>
-          解锁
+          {t('解锁')}
         </Box>
         {[1, 2, 3].map((lv) => (
           <Chip
@@ -122,9 +124,9 @@ export function StatusBar(): JSX.Element {
         label="S3"
         value={s3 === null ? '-' : `${(s3 / 1000).toFixed(1)} s`}
         color={s3Warn ? 'warning.main' : 'text.primary'}
-        tooltip="会话保持剩余时间（< 1 s 变橙预警）"
+        tooltip={t('会话保持剩余时间（< 1 s 变橙预警）')}
       />
-      <Tooltip title="点击切换自动 TesterPresent">
+      <Tooltip title={t('点击切换自动 TesterPresent')}>
         <Chip
           size="small"
           label={`3E ${tp?.enabled ? `▶ ${((tp.periodMs ?? TIMING.TESTER_PRESENT_PERIOD_MS) / 1000).toFixed(1)}s` : '⏸'}`}
@@ -146,7 +148,7 @@ export function StatusBar(): JSX.Element {
       <Field label="TX" value={String(status?.counters.tx ?? 0)} />
       <Field label="RX" value={String(status?.counters.rx ?? 0)} />
       <Field
-        label="错误"
+        label={t('错误')}
         value={String(status?.counters.errors ?? 0)}
         color={(status?.counters.errors ?? 0) > 0 ? 'error.main' : 'text.primary'}
       />
@@ -158,10 +160,10 @@ export function StatusBar(): JSX.Element {
       <Divider orientation="vertical" flexItem />
 
       {/* ⑦ Trace 条数 + 操作 */}
-      <Field label="Trace" value={`${entries.length} 条`} />
+      <Field label="Trace" value={`${entries.length} ${t('条')}`} />
       {gaps.length > 0 ? (
         <Tooltip title={gaps.map((g) => `seq ${g.fromSeq}–${g.toSeq}（${g.count} 条，${g.reason}）`).join('\n')}>
-          <Chip size="small" color="warning" label={`缺口 ${gaps.length}`} sx={{ height: 16, fontSize: 10 }} />
+          <Chip size="small" color="warning" label={t('缺口 {count}', { count: gaps.length })} sx={{ height: 16, fontSize: 10 }} />
         </Tooltip>
       ) : null}
 
@@ -171,7 +173,10 @@ export function StatusBar(): JSX.Element {
             <Chip
               size="small"
               color="error"
-              label={`● 录制 ${recording.entriesWritten} 条 / ${(recording.bytesWritten / (1024 * 1024)).toFixed(1)} MB`}
+              label={t('● 录制 {entries} 条 / {mb} MB', {
+                entries: recording.entriesWritten,
+                mb: (recording.bytesWritten / (1024 * 1024)).toFixed(1),
+              })}
               sx={{ height: 16, fontSize: 10 }}
             />
           </Tooltip>
@@ -184,18 +189,18 @@ export function StatusBar(): JSX.Element {
           }}
           style={chipStyle}
         >
-          清除
+          {t('清除')}
         </button>
         <button type="button" onClick={() => setExportOpen(true)} style={chipStyle}>
-          导出…
+          {t('导出…')}
         </button>
-        <Tooltip title="查看后端运行日志（自我排查：连接失败、超时、写盘异常等都有记录）">
+        <Tooltip title={t('查看后端运行日志（自我排查：连接失败、超时、写盘异常等都有记录）')}>
           <button type="button" onClick={() => setLogOpen(true)} style={chipStyle}>
-            日志
+            {t('日志')}
           </button>
         </Tooltip>
         <button type="button" onClick={() => setFollow(!follow)} style={chipStyle}>
-          {follow ? '⏸ 跟随中' : '▶ 已脱离'}
+          {follow ? t('⏸ 跟随中') : t('▶ 已脱离')}
         </button>
       </Box>
     </Paper>

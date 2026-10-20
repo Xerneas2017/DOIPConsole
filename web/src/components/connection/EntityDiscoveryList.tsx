@@ -2,6 +2,7 @@ import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import type { DiscoveredEntity } from '@doip/shared';
 import { useConnectionStore } from '../../store/useConnectionStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useT } from '../../i18n';
 import { EmptyState } from '../common/EmptyState';
 
 /**
@@ -11,13 +12,14 @@ export function EntityDiscoveryList(): JSX.Element {
   const entities = useConnectionStore((s) => s.entities);
   const scanning = useConnectionStore((s) => s.scanning);
   const ui = useUiStore();
+  const t = useT();
 
   if (entities.length === 0) {
     return (
       <EmptyState
         height={120}
-        title={scanning ? '正在扫描…' : '暂无发现结果'}
-        hint="点击顶部「车辆发现」发起 UDP 车辆识别请求（0x0001 → 0x0004）"
+        title={scanning ? t('正在扫描…') : t('暂无发现结果')}
+        hint={t('点击顶部「车辆发现」发起 UDP 车辆识别请求（0x0001 → 0x0004）')}
       />
     );
   }
@@ -39,7 +41,7 @@ export function EntityDiscoveryList(): JSX.Element {
             <Typography variant="caption" className="mono" sx={{ fontWeight: 700 }}>
               {e.logicalAddress}
             </Typography>
-            {e.isSimulated ? <Chip size="small" label="仿真" sx={{ height: 16, fontSize: 10 }} /> : null}
+            {e.isSimulated ? <Chip size="small" label={t('仿真')} sx={{ height: 16, fontSize: 10 }} /> : null}
             <Chip
               size="small"
               label={e.nodeType}
@@ -47,14 +49,14 @@ export function EntityDiscoveryList(): JSX.Element {
               variant="outlined"
             />
             <Box sx={{ ml: 'auto' }}>
-              <Tooltip title={`带入 ${e.ip}:${e.port}`}>
+              <Tooltip title={t('带入 {endpoint}', { endpoint: `${e.ip}:${e.port}` })}>
                 <Button
                   size="small"
                   variant="outlined"
                   sx={{ minWidth: 32, px: 0.75, py: 0, fontSize: 11 }}
                   onClick={() => ui.setTarget({ host: e.ip, port: e.port, ta: e.logicalAddress })}
                 >
-                  连
+                  {t('连')}
                 </Button>
               </Tooltip>
             </Box>

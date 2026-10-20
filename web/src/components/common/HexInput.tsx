@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TextField } from '@mui/material';
 import { normalizeHex, tryParseHex } from '@doip/shared';
+import { useT } from '../../i18n';
 
 /**
  * 受控 hex 输入（T11，§8.4）：
@@ -32,6 +33,7 @@ export function HexInput({
 }: HexInputProps): JSX.Element {
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
 
   useEffect(() => {
     setDraft(value);
@@ -47,18 +49,18 @@ export function HexInput({
     }
     const bytes = tryParseHex(trimmed);
     if (bytes === null) {
-      setError('非法 hex：只允许 0-9 / A-F');
+      setError(t('非法 hex：只允许 0-9 / A-F'));
       return;
     }
     if (expectedBytes !== undefined && bytes.length !== expectedBytes) {
-      setError(`长度应为 ${expectedBytes} 字节，当前 ${bytes.length} 字节`);
+      setError(t('长度应为 {expected} 字节，当前 {actual} 字节', { expected: expectedBytes, actual: bytes.length }));
       return;
     }
     setError(null);
     try {
       onChange(normalizeHex(trimmed));
     } catch {
-      setError('非法 hex 输入');
+      setError(t('非法 hex 输入'));
     }
   };
 
