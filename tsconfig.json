@@ -14,7 +14,8 @@
     "shared/src/**/*.ts",
     "server/src/**/*.ts",
     "web/src/**/*.ts",
-    "web/src/**/*.tsx"
+    "web/src/**/*.tsx",
+    "bin/**/*.ts"
   ],
   "exclude": [
     "node_modules",

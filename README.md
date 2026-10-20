@@ -1,5 +1,8 @@
 # DoIP 诊断控制台
 
+> 🌐 界面支持 **简体中文 / English / Deutsch**（工具栏右上角「中 / EN / DE」切换，选择会记住）
+> 📖 Docs: [简体中文](README.md) · [English](docs/GUIDE.en.md) · [Deutsch](docs/GUIDE.de.md)
+
 ISO 13400-2（DoIP）/ ISO 14229-1（UDS）诊断控制台。monorepo：`shared` / `server` / `web`。
 
 ## 快速开始
@@ -18,7 +21,35 @@ bash scripts/start.sh              # 构建 + 启动
 bash scripts/start.sh --no-build   # 跳过构建，直接用已有 web/dist
 ```
 
+Windows 用户等价地双击或运行：
+
+```bat
+scripts\start.bat              &rem 构建 + 启动，3 秒后自动打开浏览器
+scripts\start.bat --no-build   &rem 跳过构建
+```
+
 只需要**一个进程、一个地址** `http://127.0.0.1:8787`。端口被占用会自动顺延，以终端输出的实际地址为准。
+
+> 📖 分平台完整安装与使用说明：[Windows 使用指南](docs/DEPLOY-WINDOWS.md) · [macOS 使用指南](docs/DEPLOY-MACOS.md)
+
+## 命令行工具（CLI）
+
+除界面外提供 `doip` 命令，适合脚本化与 CI——复用同一套协议栈，**不启动 HTTP 服务、不需要浏览器**
+（仿真 ECU 需先启动：`npm run sim:up`，或在界面里点「启动仿真 ECU」）：
+
+```bash
+npm run cli -- scan --port 13401          # UDP 车辆发现（0x0001 → 0x0004）
+npm run cli -- send 22F190 -p 13401       # 连接 + 路由激活 + 发 UDS（0x8001），打印响应
+npm run cli -- alive -p 13401             # 主动存活检查（0x0007 → 0x0008）
+npm run cli -- entity-status -p 13401     # 实体状态（0x4001 → 0x4002）
+npm run cli -- power-mode -p 13401        # 电源模式（0x4003 → 0x4004）
+
+npm link                                  # 可选：注册全局命令，之后直接用 doip <命令>
+doip send 22 F1 90 -p 13401 --json        # 机器可读输出，适合管道/CI
+```
+
+危险操作（`0x11` 复位 / `0x14` 清 DTC / `0x2E` 写 DID / `0x31` 例程 / `0x27` 发送密钥）需显式加 `--yes`，
+与界面同一套门禁。完整命令、选项、退出码与 CI 示例见 **[CLI 文档](docs/CLI.md)**。
 
 **方式二：开发模式（改前端代码时用）**
 

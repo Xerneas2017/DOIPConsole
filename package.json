@@ -12,6 +12,9 @@
     "server",
     "web"
   ],
+  "bin": {
+    "doip": "bin/doip.mjs"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run test --workspace @doip/server && npm run test --workspace @doip/web",
@@ -20,6 +23,7 @@
     "build": "npm run build --workspace @doip/web",
     "start": "npm run build && node --import tsx server/src/index.ts",
     "start:only": "node --import tsx server/src/index.ts",
+    "cli": "node --import tsx bin/doip-cli.ts",
     "sim:up": "node scripts/sim-up.mjs",
     "interop": "python3 scripts/interop-python-doipclient.py",
     "smoke": "node scripts/smoke.mjs",

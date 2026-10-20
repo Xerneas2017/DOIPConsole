@@ -43,6 +43,19 @@ let framesEnabled = process.env['DOIP_LOG_FRAMES'] === '1';
 const fileLogEnabled = process.env['DOIP_LOG_FILE'] !== '0';
 
 /**
+ * ★CLI 适配：彻底静音（连同文件日志）。
+ *
+ * 命令行工具的 stdout 必须**只留业务输出**（尤其是 `--json`），
+ * 而后端各模块在 info 级会打连接/激活日志，直接混进 stdout 会破坏管道解析。
+ * 静音后 write() 直接返回，也不创建文件日志 sink —— 进程可干净退出。
+ */
+let silenced = false;
+
+export function silenceLogs(): void {
+  silenced = true;
+}
+
+/**
  * 写一份到文件日志。
  *
  * ★这里必须"永不抛、永不阻塞"：日志本身绝不能成为故障源。
@@ -144,6 +157,7 @@ class ModLogger implements Logger {
   }
 
   private write(level: LogLevel, msg: string, ctx?: Record<string, unknown>): void {
+    if (silenced) return;
     if (!isLevelEnabled(level)) return;
     const fields: Record<string, unknown> = { mod: this.mod };
     if (ctx !== undefined) {
